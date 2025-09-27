@@ -148,11 +148,11 @@
                 console.log('Response status:', response.status);
                 console.log('Response headers:', response.headers);
 
-                //if (response.status === 401) {
-                //    // Not authenticated - redirect to login
-                //    window.location.href = '/';
-                //    return;
-                //}
+                if (response.status === 401) {
+                    // Not authenticated - redirect to login
+                    window.location.href = '/';
+                    return;
+                }
 
                 const data = await response.json();
 

@@ -24,6 +24,33 @@
     
     // Set the login button href dynamically
     document.getElementById('login-button').href = `${API_BASE_URL}/auth/login`;
+
+    // Check if the user is logged in and show dashboard instead of login page if user is logged in
+    async function checkLogin() {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+                        'Content-Type': 'application/json'
+                    }
+        });
+        const data = await response.json();
+        if (data.authenticated) {
+          // User is logged in
+          window.location.href = '/dashboard';
+        }
+      }
+      catch (error) {
+        // If there's an error, assume not logged in and do nothing.
+        // The user stays on the login page.
+        console.error('Auth check failed:', error);
+      }
+      }
+
+      checkLogin();
+          
+
   </script>  
   
   <!--Display the chess background on inactivity-->
