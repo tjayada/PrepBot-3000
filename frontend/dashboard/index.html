@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lichess Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .stats-container {
+            display: none;
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 16px;
+            border-radius: 4px;
+            border: 1px solid #fcc;
+        }
+        .stat-card {
+            display: inline-block;
+            background: #f9f9f9;
+            margin: 10px;
+            padding: 16px;
+            border-radius: 6px;
+            min-width: 120px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .username {
+            font-size: 28px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <h1>Your Lichess Dashboard</h1>
+    
+    <!-- Loading State -->
+    <div id="loading" class="loading">
+        <p>Loading your stats...</p>
+    </div>
+    
+    <!-- Error State -->
+    <div id="error" class="error" style="display: none;">
+        <p id="error-message"></p>
+        <button onclick="retryLoad()">Try Again</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+    
+    <!-- Success State -->
+    <div id="stats" class="stats-container">
+        <div class="username" id="username"></div>
+        
+        <div class="stat-card">
+            <div class="stat-value" id="blitz-rating">-</div>
+            <div class="stat-label">Blitz Rating</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-value" id="rapid-rating">-</div>
+            <div class="stat-label">Rapid Rating</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-value" id="bullet-rating">-</div>
+            <div class="stat-label">Bullet Rating</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-value" id="total-games">-</div>
+            <div class="stat-label">Games Played</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-value" id="wins">-</div>
+            <div class="stat-label">Wins</div>
+        </div>
+        
+        <button onclick="retryLoad()">Refresh</button>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <script>
+        // API Configuration - will be set by the server or environment
+        const API_BASE_URL = window.location.origin.replace(':3000', ':8000'); 
+
+        // Load user stats when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+
+            console.log('All cookies:', document.cookie);
+            console.log('Session cookie exists:', document.cookie.includes('session='));
+
+            loadUserStats();
+        });
+
+        async function loadUserStats() {
+            try {
+                showLoading();
+
+                console.log('Making request to:', `${API_BASE_URL}/api/user/stats`);
+                console.log('Cookies before request:', document.cookie);
+                
+                const response = await fetch(`${API_BASE_URL}/api/user/stats`, {
+                    method: 'GET',
+                    credentials: 'include', // Include session cookies
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+
+                //if (response.status === 401) {
+                //    // Not authenticated - redirect to login
+                //    window.location.href = '/';
+                //    return;
+                //}
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayStats(data.data);
+                } else {
+                    showError(data.error || 'Failed to load stats');
+                }
+
+            } catch (error) {
+                console.error('Network error:', error);
+                showError('Network error. Please check your connection.');
+            }
+        }
+
+        function displayStats(userData) {
+            // Hide loading, show stats
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('stats').style.display = 'block';
+
+            // Update UI with data
+            document.getElementById('username').textContent = userData.username;
+            document.getElementById('blitz-rating').textContent = userData.rating.blitz || 'Unrated';
+            document.getElementById('rapid-rating').textContent = userData.rating.rapid || 'Unrated';
+            document.getElementById('bullet-rating').textContent = userData.rating.bullet || 'Unrated';
+            document.getElementById('total-games').textContent = userData.games_played;
+            document.getElementById('wins').textContent = userData.wins;
+        }
+
+        function showLoading() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('stats').style.display = 'none';
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('stats').style.display = 'none';
+            document.getElementById('error-message').textContent = message;
+        }
+
+        function retryLoad() {
+            loadUserStats();
+        }
+
+        async function logout() {
+            try {
+                await fetch(`${API_BASE_URL}/api/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.log('Logout request failed, but redirecting anyway');
+            }
+            
+            // Redirect to login page
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>

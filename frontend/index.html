@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lichess Scout</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">-->
+  <!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">-->
+</head>
+
+<body>
+
+  <!--Display the main content in the center of the page-->
+  <div class="main-content">
+      <h1>Lichess Scout</h1>
+      <h3>Prep Like A GM In 30 Seconds Or Less</h3>
+      <a id="login-button" href="#" style="margin-top: 20px; display: inline-block">Login with Lichess</a>
+  </div>
+  
+  <script>
+    // API Configuration - will be set by the server or environment
+    const API_BASE_URL = window.location.origin.replace(':3000', ':8000'); 
+    
+    // Set the login button href dynamically
+    document.getElementById('login-button').href = `${API_BASE_URL}/auth/login`;
+  </script>  
+  
+  <!--Display the chess background on inactivity-->
+  <div class="chessboard" id="chessboard"></div>
+  <script src="script.js"></script>
+
+</body>
+
+</html>

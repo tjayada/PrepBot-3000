@@ -1,0 +1,59 @@
+body {
+  transition: background-color 0.5s ease;
+  background: #2a2a2a;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  text-align: center;
+  padding: 20px;
+}
+a, button {
+  background: #4CAF50;
+  color: #fff;
+  padding: 10px 20px;
+  text-decoration: none;
+  border-radius: 5px;
+}
+ul {
+  list-style: none;
+  padding: 0;
+}
+li {
+  margin: 10px 0;
+}
+
+.main-content {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    text-align: center;
+    width: 90%;
+    max-width: 800px;
+}
+
+.chessboard {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: grid;
+            z-index: -1;
+            grid-template: repeat(auto-fill, 250px) / repeat(auto-fill, 250px);
+}
+.square {
+    width: 250px;
+    height: 250px;
+    background: transparent;
+    filter: blur(10px);
+    opacity: 0;
+    transition: opacity 1s ease-out;
+    transform: scale(1.01) translateZ(0);
+}
+.square.white {
+    background: #ffffff;
+}
+.square.visible {
+    opacity: 0.6;
+}
