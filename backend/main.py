@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI, Request, Depends, HTTPException, Response
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from supabase import create_client, Client
 import berserk
 import jwt
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor
 
 
 ############### Setup ###############
@@ -58,6 +60,8 @@ app.add_middleware(
 
 PORT = int(os.getenv("PORT", 8000))
 
+executor = ThreadPoolExecutor(max_workers=10)
+check_stream_events_queue = {}
 
 ############### Define Functions ###############
 
@@ -241,6 +245,97 @@ def get_lichess_client(user_data: dict) -> berserk.Client:
     return berserk.Client(session=session)
 
 
+async def generate_prep(pgns: str, opponent: str) -> str:
+    return "Quick prep: Opponent's style is a mystery—play sharp!"
+
+
+def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
+    user_id = user["id"]
+    client = get_lichess_client(user)
+
+    try:
+        for event in client.board.stream_incoming_events():
+            # check if not expired or canceled
+            if user_id in check_stream_events_queue:
+                if check_stream_events_queue[user_id]["expiry"] < datetime.now(
+                    timezone.utc
+                ):
+                    # remove from queue
+                    check_stream_events_queue.pop(user_id, None)
+                    print(f"DEBUG: Listening expired for {user_id}")
+                    break
+
+            if user_id not in check_stream_events_queue:
+                print(f"DEBUG: User not in activity queue for {user_id}")
+                break
+
+            print(f"DEBUG: Received event for user_id {user_id}: {event}")
+
+            if event.get("type") == "gameStart":
+                game_id = event["game"]["id"]
+                opponent = str(event["game"]["opponent"]["id"])
+
+                # Schedule the async part to run on the main event loop
+                asyncio.run_coroutine_threadsafe(
+                    handle_game_start_event(game_id, opponent), loop
+                )
+                # You could optionally wait for the result, but it's not necessary here
+                # future.result()
+
+                print("\n DEBUG: Game start event handled successfully \n")
+
+    except Exception as e:
+        print(f"DEBUG: Stream error for {user_id}: {e}")
+        # cancel activity from queue
+        check_stream_events_queue.pop(user_id, None)
+        # Raising HTTPException here will crash the thread, not send a response.
+        # It's better to just log the error.
+
+
+async def handle_game_start_event(game_id: str, opponent: str):
+    """Asynchronous handler for game start events."""
+
+    print("\n in the handle_game_start_event function")
+
+    # Now would be a good time to check the DB if there already exist an analysis
+    result = supabase.table("user_events").select("*").eq("id", opponent).execute()
+
+    print("\n after supabase call")
+
+    # check that analysis is not older then 7 days
+    if result.data and datetime.fromisoformat(
+        result.data["created_at"].replace("Z", "+00:00")
+    ) > datetime.now(timezone.utc) - timedelta(days=7):
+        print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent}")
+        return
+
+    print("after if check")
+
+    # Fetch recent games using berserk
+    # games = client.users.get_pgns(opponent, max=10)
+    # pgns = "\n".join(game["pgn"] for game in games)
+    pgns = ""
+
+    # Generate sassy prep
+    prep_text = await generate_prep(pgns, opponent)
+
+    # Store in Supabase
+    data = {
+        "id": opponent,
+        "game_id": game_id,
+        "prep_text": prep_text,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    print("about to use supa abse")
+
+    try:
+        supabase.table("user_events").upsert(data, on_conflict="id").execute()
+        print(f"DEBUG: Generated prep for opponent {opponent} in game {game_id}")
+    except APIError as e:
+        print(f"DEBUG: Database error: {e}")
+
+
 ############### Define API Endpoints ###############
 
 
@@ -263,7 +358,7 @@ async def login(request: Request):
         "client_id": CLIENT_ID,
         "redirect_uri": f"{base_url}/auth/callback",
         # "scope": "preference:read stream:watch",
-        "scope": "preference:read",
+        "scope": "preference:read challenge:read",
         "code_challenge_method": "S256",
         "code_challenge": challenge,
     }
@@ -380,6 +475,24 @@ async def get_user_stats(user: dict = Depends(require_auth)):
         return {"success": False, "error": "Failed to fetch user stats"}
 
 
+@app.post("/api/start_listening")
+async def start_listening(duration: int = 20, user: dict = Depends(require_auth)):
+    user_id = user["id"]
+    loop = asyncio.get_running_loop()
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=duration)
+
+    # check if user / task not yet in activity queue, else skip
+    if user_id not in check_stream_events_queue:
+        check_stream_events_queue[user_id] = {"expiry": expiry}
+
+        # Submit the blocking function to the executor
+        executor.submit(listen_for_games_blocking, user, loop)
+
+        return {"success": True, "message": f"Listening for {duration} minutes"}
+    else:
+        return {"success": True, "message": "Already listening"}
+
+
 @app.post("/api/logout")
 async def logout(request: Request, response: Response):
     """Logout user and invalidate session"""
@@ -440,6 +553,16 @@ async def debug_cookies(request: Request):
         "session": dict(request.session),
         "headers": dict(request.headers),
     }
+
+
+@app.post("/api/cancel_listening")
+async def cancel_listening(user: dict = Depends(require_auth)):
+    user_id = user["id"]
+
+    # remove from activity queue
+    check_stream_events_queue.pop(user_id, None)
+
+    return {"success": True, "message": "Stopped listening"}
 
 
 if __name__ == "__main__":

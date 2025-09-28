@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/styles.css">
     <title>Lichess Dashboard</title>
     <style>
         body {
@@ -10,7 +11,6 @@
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
-            background-color: #f5f5f5;
         }
         .loading {
             text-align: center;
@@ -117,6 +117,16 @@
         <button onclick="logout()">Logout</button>
     </div>
 
+    <!--Toggle switch-->
+    <div style="margin-top: 20px; display: inline-block;">
+        <label class="switch" for="switch-toggle">
+            <input type="checkbox" id="switch-toggle">
+            <span class="slider round"></span>
+        </label>
+    </div>
+    
+
+
     <script>
         // API Configuration - will be set by the server or environment
         const API_BASE_URL = window.location.origin.replace(':3000', ':8000'); 
@@ -129,6 +139,88 @@
 
             loadUserStats();
         });
+
+        document.getElementById('switch-toggle').addEventListener('change', async function() {
+            if (this.checked) {
+                await startListeningForEvents();
+            } else {
+                await cancelListeningForEvents();
+            }
+        });
+
+        async function startListeningForEvents() {
+            console.log("Starting event listener...");
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/start_listening`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ duration: 20 }) // Allow dynamic duration later
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    console.log(data.message);
+                    // Show user feedback (e.g., toast or UI update)
+                    alert(data.message); // Temporary for testing
+                } else {
+                    console.error('Failed to start listening:', data.error);
+                    alert('Failed to start listening: ' + (data.error || 'Unknown error'));
+                    this.checked = false; // Reset toggle on failure
+                }
+            } catch (error) {
+                console.error('Error starting listener:', error);
+                alert('Error starting listener: ' + error.message);
+                this.checked = false;
+            }
+        }
+
+        async function cancelListeningForEvents() {
+            console.log("Cancelling event listener...");
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/cancel_listening`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    console.log(data.message);
+                    alert(data.message); // Temporary for testing
+                } else {
+                    console.error('Failed to cancel listening:', data.error);
+                    alert('Failed to cancel: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error cancelling listener:', error);
+                alert('Error cancelling listener: ' + error.message);
+            }
+        }
+
+
+        function showPrep(prepText) {
+            // Simple in-page display (replace with DOM overlay for extension)
+            const overlay = document.createElement('div');
+            overlay.style.position = 'fixed';
+            overlay.style.bottom = '20px';
+            overlay.style.right = '20px';
+            overlay.style.background = '#fff';
+            overlay.style.border = '1px solid #000';
+            overlay.style.padding = '10px';
+            overlay.style.zIndex = '10000';
+            overlay.style.maxWidth = '300px';
+            overlay.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
+            overlay.innerHTML = `<p>${prepText}</p><button onclick="this.parentElement.remove()">Close</button>`;
+            document.body.appendChild(overlay);
+            
+            setTimeout(() => overlay.remove(), 30000); // Auto-close after 30s
+        }
+
 
         async function loadUserStats() {
             try {
