@@ -67,6 +67,89 @@
         button:hover {
             background: #c0392b;
         }
+        
+        /* Toggle switch styles */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+        
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+        }
+        
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+        }
+        
+        input:checked + .slider {
+            background-color: #e74c3c;
+        }
+        
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        
+        .slider.round {
+            border-radius: 34px;
+        }
+        
+        .slider.round:before {
+            border-radius: 50%;
+        }
+        
+        /* Countdown timer styles */
+        .countdown-container {
+            display: none;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px solid #e74c3c;
+            text-align: center;
+        }
+        
+        .countdown-timer {
+            font-size: 48px;
+            font-weight: bold;
+            color: #e74c3c;
+            margin-bottom: 10px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .countdown-label {
+            font-size: 18px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .countdown-status {
+            font-size: 14px;
+            color: #888;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -123,6 +206,14 @@
             <input type="checkbox" id="switch-toggle">
             <span class="slider round"></span>
         </label>
+        <span style="margin-left: 10px; font-weight: bold;">Listening Mode</span>
+    </div>
+    
+    <!-- Countdown Timer -->
+    <div id="countdown-container" class="countdown-container">
+        <div class="countdown-label">Listening for opponent preparation...</div>
+        <div id="countdown-timer" class="countdown-timer">20:00</div>
+        <div id="countdown-status" class="countdown-status">Waiting for game to start</div>
     </div>
     
 
@@ -131,6 +222,11 @@
         // API Configuration - will be set by the server or environment
         const API_BASE_URL = window.location.origin.replace(':3000', ':8000'); 
 
+        // Global variables for countdown timer
+        let countdownInterval = null;
+        let listeningStartTime = null;
+        let listeningDuration = 20; // minutes
+
         // Load user stats when page loads
         document.addEventListener('DOMContentLoaded', function() {
 
@@ -138,6 +234,7 @@
             console.log('Session cookie exists:', document.cookie.includes('session='));
 
             loadUserStats();
+            checkListeningStatus(); // Check if already listening
         });
 
         document.getElementById('switch-toggle').addEventListener('change', async function() {
@@ -157,23 +254,29 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ duration: 20 }) // Allow dynamic duration later
+                    body: JSON.stringify({ duration: listeningDuration })
                 });
                 
                 const data = await response.json();
                 if (data.success) {
                     console.log(data.message);
-                    // Show user feedback (e.g., toast or UI update)
-                    alert(data.message); // Temporary for testing
+                    
+                    // Start countdown timer
+                    listeningStartTime = new Date();
+                    startCountdownTimer();
+                    
+                    // Show countdown container
+                    document.getElementById('countdown-container').style.display = 'block';
+                    
                 } else {
                     console.error('Failed to start listening:', data.error);
                     alert('Failed to start listening: ' + (data.error || 'Unknown error'));
-                    this.checked = false; // Reset toggle on failure
+                    document.getElementById('switch-toggle').checked = false; // Reset toggle on failure
                 }
             } catch (error) {
                 console.error('Error starting listener:', error);
                 alert('Error starting listener: ' + error.message);
-                this.checked = false;
+                document.getElementById('switch-toggle').checked = false;
             }
         }
 
@@ -191,7 +294,13 @@
                 const data = await response.json();
                 if (data.success) {
                     console.log(data.message);
-                    alert(data.message); // Temporary for testing
+                    
+                    // Stop countdown timer
+                    stopCountdownTimer();
+                    
+                    // Hide countdown container
+                    document.getElementById('countdown-container').style.display = 'none';
+                    
                 } else {
                     console.error('Failed to cancel listening:', data.error);
                     alert('Failed to cancel: ' + (data.error || 'Unknown error'));
@@ -199,6 +308,101 @@
             } catch (error) {
                 console.error('Error cancelling listener:', error);
                 alert('Error cancelling listener: ' + error.message);
+            }
+        }
+
+        function startCountdownTimer() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            
+            countdownInterval = setInterval(updateCountdown, 1000);
+            updateCountdown(); // Initial update
+        }
+
+        function stopCountdownTimer() {
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+                countdownInterval = null;
+            }
+            listeningStartTime = null;
+        }
+
+        function updateCountdown() {
+            if (!listeningStartTime) return;
+            
+            const now = new Date();
+            const elapsed = Math.floor((now - listeningStartTime) / 1000); // seconds elapsed
+            const remaining = (listeningDuration * 60) - elapsed; // seconds remaining
+            
+            if (remaining <= 0) {
+                // Timer finished
+                stopCountdownTimer();
+                document.getElementById('countdown-timer').textContent = '00:00';
+                document.getElementById('countdown-status').textContent = 'Listening time expired';
+                
+                // Auto-toggle off and hide countdown
+                setTimeout(() => {
+                    document.getElementById('switch-toggle').checked = false;
+                    document.getElementById('countdown-container').style.display = 'none';
+                }, 2000);
+                
+                return;
+            }
+            
+            // Format remaining time as MM:SS
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            document.getElementById('countdown-timer').textContent = timeString;
+            
+            // Update status based on remaining time
+            if (remaining <= 60) {
+                document.getElementById('countdown-status').textContent = 'Almost done listening...';
+                document.getElementById('countdown-timer').style.color = '#e74c3c';
+            } else if (remaining <= 300) { // 5 minutes
+                document.getElementById('countdown-status').textContent = 'Listening will end soon';
+                document.getElementById('countdown-timer').style.color = '#f39c12';
+            } else {
+                document.getElementById('countdown-status').textContent = 'Waiting for game to start';
+                document.getElementById('countdown-timer').style.color = '#e74c3c';
+            }
+        }
+
+        async function checkListeningStatus() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/listening_status`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success && data.listening) {
+                    // User is already listening, restore the UI state
+                    document.getElementById('switch-toggle').checked = true;
+                    document.getElementById('countdown-container').style.display = 'block';
+                    
+                    // Calculate remaining time based on server data
+                    const expiryTime = new Date(data.expiry_time);
+                    const now = new Date();
+                    const remainingMs = expiryTime - now;
+                    
+                    if (remainingMs > 0) {
+                        // Start countdown from server time
+                        listeningStartTime = new Date(now.getTime() - (data.duration * 60 * 1000 - remainingMs));
+                        startCountdownTimer();
+                    } else {
+                        // Session expired, stop listening
+                        await cancelListeningForEvents();
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking listening status:', error);
+                // Don't show error to user, just continue normally
             }
         }
 

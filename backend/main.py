@@ -17,6 +17,7 @@ import berserk
 import jwt
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
+#import json
 
 
 ############### Setup ###############
@@ -245,8 +246,8 @@ def get_lichess_client(user_data: dict) -> berserk.Client:
     return berserk.Client(session=session)
 
 
-async def generate_prep(pgns: str, opponent: str) -> str:
-    return "Quick prep: Opponent's style is a mystery—play sharp!"
+async def generate_prep(opponent_id: str, opponent_color: str) -> str:
+    return f"Quick prep: {opponent_id} is playing {opponent_color}. Good luck!"
 
 
 def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
@@ -272,12 +273,15 @@ def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
             print(f"DEBUG: Received event for user_id {user_id}: {event}")
 
             if event.get("type") == "gameStart":
-                game_id = event["game"]["id"]
-                opponent = str(event["game"]["opponent"]["id"])
+                game_id = event["game"]["fullId"]
+                opponent_id = str(event["game"]["opponent"]["id"])
+                user_color = event["game"]["color"]
+                opponent_color = "white" if user_color == "black" else "black"
+
 
                 # Schedule the async part to run on the main event loop
                 asyncio.run_coroutine_threadsafe(
-                    handle_game_start_event(game_id, opponent), loop
+                    handle_game_start_event(game_id, user_id, opponent_id, opponent_color), loop
                 )
                 # You could optionally wait for the result, but it's not necessary here
                 # future.result()
@@ -292,46 +296,91 @@ def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
         # It's better to just log the error.
 
 
-async def handle_game_start_event(game_id: str, opponent: str):
+'''
+async def stream_games_for_user(username: str, token: str, max_games: int = 50):
+    """
+    Asynchronously streams games from the Lichess API using httpx, yielding
+    each game as it arrives. This is a highly memory-efficient and
+    performant method.
+    """
+    url = f"https://lichess.org/api/games/user/{username}"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/x-ndjson"  # Important for streaming
+    }
+    params = {
+        "rated": "true",
+        "clocks": "true",
+        "opening": "true",
+        "max": max_games,
+        "perfType": "blitz,rapid,classical"
+    }
+
+    print(f"Streaming last {max_games} games for {username}...")
+    try:
+        async with httpx.AsyncClient() as client:
+            async with client.stream("GET", url, headers=headers, params=params, timeout=30.0) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        yield json.loads(line)
+    except httpx.RequestError as e:
+        print(f"An HTTP error occurred while streaming games: {e}")
+
+
+async def analyze_opponent_games(opponent_id: str, token: str, max_games: int = 50) -> str:
+    """
+    Downloads, analyzes, and generates a brief for an opponent.
+    """
+    analyzer = ChessGameAnalyzer()
+    games_analyzed = 0
+    async for game in stream_games_for_user(opponent_id, token, max_games=max_games):
+        analyzer.add_game(game)
+        games_analyzed += 1
+    
+    if games_analyzed == 0:
+        return "Could not fetch any recent games for this opponent."
+
+    # This part is CPU-bound, but it runs after the I/O is complete.
+    # For very large analysis, you could run this in an executor.
+    brief = analyzer.generate_opponent_brief(opponent_id)
+    return brief
+'''
+
+async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, opponent_color: str):
     """Asynchronous handler for game start events."""
 
     print("\n in the handle_game_start_event function")
 
-    # Now would be a good time to check the DB if there already exist an analysis
-    result = supabase.table("user_events").select("*").eq("id", opponent).execute()
+    # Check DB if a recent analysis already exists
+    result = supabase.table("analytics").select("*").eq("target_user", opponent_id).execute()
 
-    print("\n after supabase call")
+    if result.data and len(result.data) > 0:
+        user_data = result.data[0]
+        if datetime.fromisoformat(user_data["created_at"].replace("Z", "+00:00")) > datetime.now(timezone.utc) - timedelta(days=7):
+            print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent_id}")
+            return
 
-    # check that analysis is not older then 7 days
-    if result.data and datetime.fromisoformat(
-        result.data["created_at"].replace("Z", "+00:00")
-    ) > datetime.now(timezone.utc) - timedelta(days=7):
-        print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent}")
-        return
+    # Fetch games, analyze, and generate the preparation text
+    #prep_text = await analyze_opponent_games(opponent, lichess_api_token, max_games=50)
+    prep_text = await generate_prep(opponent_id, opponent_color)
 
-    print("after if check")
-
-    # Fetch recent games using berserk
-    # games = client.users.get_pgns(opponent, max=10)
-    # pgns = "\n".join(game["pgn"] for game in games)
-    pgns = ""
-
-    # Generate sassy prep
-    prep_text = await generate_prep(pgns, opponent)
 
     # Store in Supabase
     data = {
-        "id": opponent,
         "game_id": game_id,
+        "created_by": user_id,
+        "target_user": opponent_id,
+        "color": opponent_color,
         "prep_text": prep_text,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    print("about to use supa abse")
+    print(f"About to upsert analysis for opponent {opponent_id}")
 
     try:
-        supabase.table("user_events").upsert(data, on_conflict="id").execute()
-        print(f"DEBUG: Generated prep for opponent {opponent} in game {game_id}")
+        supabase.table("analytics").upsert(data, on_conflict="game_id").execute()
+        print(f"DEBUG: Generated prep for opponent {opponent_id} in game {game_id}")
     except APIError as e:
         print(f"DEBUG: Database error: {e}")
 
@@ -476,14 +525,19 @@ async def get_user_stats(user: dict = Depends(require_auth)):
 
 
 @app.post("/api/start_listening")
-async def start_listening(duration: int = 20, user: dict = Depends(require_auth)):
+async def start_listening(request_data: dict, user: dict = Depends(require_auth)):
     user_id = user["id"]
+    duration = request_data.get("duration", 20)
     loop = asyncio.get_running_loop()
     expiry = datetime.now(timezone.utc) + timedelta(minutes=duration)
 
     # check if user / task not yet in activity queue, else skip
     if user_id not in check_stream_events_queue:
-        check_stream_events_queue[user_id] = {"expiry": expiry}
+        check_stream_events_queue[user_id] = {
+            "expiry": expiry,
+            "duration": duration,
+            "start_time": datetime.now(timezone.utc)
+        }
 
         # Submit the blocking function to the executor
         executor.submit(listen_for_games_blocking, user, loop)
@@ -500,6 +554,8 @@ async def logout(request: Request, response: Response):
         # Get current user to invalidate their session
         user = get_current_user(request)
         if user:
+            # remove from activity queue
+            check_stream_events_queue.pop(user["id"], None)
             # Invalidate session in database by setting expired time AND clearing token
             now = datetime.now(timezone.utc)
             supabase.table("users").update(
@@ -563,6 +619,43 @@ async def cancel_listening(user: dict = Depends(require_auth)):
     check_stream_events_queue.pop(user_id, None)
 
     return {"success": True, "message": "Stopped listening"}
+
+
+@app.get("/api/listening_status")
+async def get_listening_status(user: dict = Depends(require_auth)):
+    """Get current listening status and remaining time"""
+    user_id = user["id"]
+    
+    if user_id in check_stream_events_queue:
+        queue_data = check_stream_events_queue[user_id]
+        expiry_time = queue_data["expiry"]
+        duration = queue_data.get("duration", 20)
+        
+        # Calculate remaining time
+        now = datetime.now(timezone.utc)
+        remaining_time = expiry_time - now
+        
+        if remaining_time.total_seconds() > 0:
+            # Still listening
+            return {
+                "success": True,
+                "listening": True,
+                "expiry_time": expiry_time.isoformat(),
+                "remaining_seconds": int(remaining_time.total_seconds()),
+                "duration": duration
+            }
+        else:
+            # Expired, remove from queue
+            check_stream_events_queue.pop(user_id, None)
+    
+    # Not listening
+    return {
+        "success": True,
+        "listening": False,
+        "expiry_time": None,
+        "remaining_seconds": 0,
+        "duration": 0
+    }
 
 
 if __name__ == "__main__":
