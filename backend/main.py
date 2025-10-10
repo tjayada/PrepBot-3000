@@ -17,10 +17,34 @@ import berserk
 import jwt
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
-#import json
+import pandas as pd
+
+# Import our analysis modules
+from analysis import generate_insights, stream_games_for_user, extract_features
+from llm_service import build_context, build_snappy_prompt, generate_llm_recommendations, get_system_prompt
 
 
 ############### Setup ###############
+
+"""
+Database Schema Requirements:
+
+1. users table:
+   - id (text, primary key) - Lichess username
+   - access_token (text) - Lichess API token
+   - token_expires_at (timestamp) - Token expiration
+   - session_expires_at (timestamp) - Session expiration
+   - session_token (text) - JWT session token
+   - created_at (timestamp) - Account creation time
+
+2. analytics table:
+   - game_id (text, primary key) - Unique game identifier
+   - created_by (text) - User who created this analysis
+   - target_user (text) - Opponent being analyzed
+   - color (text) - Color preference for analysis
+   - prep_text (text) - Analysis results
+   - created_at (timestamp) - Analysis creation time
+"""
 
 dotenv.load_dotenv()
 app = FastAPI()
@@ -33,6 +57,8 @@ BASE_URL = os.getenv(
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -246,8 +272,62 @@ def get_lichess_client(user_data: dict) -> berserk.Client:
     return berserk.Client(session=session)
 
 
-async def generate_prep(opponent_id: str, opponent_color: str) -> str:
-    return f"Quick prep: {opponent_id} is playing {opponent_color}. Good luck!"
+async def generate_prep(opponent_id: str, opponent_color: str, user_access_token: str = None) -> str:
+    """
+    Generate comprehensive preparation analysis for an opponent using LLM for snappy recommendations.
+    
+    Args:
+        opponent_id: Username of the opponent to analyze
+        opponent_color: Color the opponent will play ('white' or 'black')
+        user_access_token: Access token for Lichess API calls
+    
+    Returns:
+        String containing actionable preparation advice
+    """
+    try:
+        print(f"Starting analysis for opponent: {opponent_id} ({opponent_color})")
+        
+        if not user_access_token:
+            raise ValueError("No user access token provided")
+        
+        # Step 1: Fetch and analyze games
+        max_games = 50 
+        all_feats = []
+        
+        async for game in stream_games_for_user(opponent_id, user_access_token, opponent_color, max_games=max_games):
+            feats = extract_features(game, opponent_color)
+            if feats:
+                all_feats.append(feats)
+        
+        if not all_feats:
+            return f"⚠️ No recent games found for {opponent_id}. Cannot generate preparation analysis."
+        
+        df = pd.DataFrame(all_feats)
+        print(f"Analyzed {len(df)} games for {opponent_id}")
+        
+        # Step 2: Generate insights 
+        insights = generate_insights(df, min_info_gain=0.0, top_k=5)
+
+        if not insights:
+            raise ValueError("No insights generated")
+
+        # Step 3: Build context and prompts
+        context = build_context(insights, opponent_id, opponent_color, len(df))
+        prompt = build_snappy_prompt(context)
+        system_prompt = get_system_prompt()
+
+        # Step 4: generate recommendations
+        quick_analysis = await generate_llm_recommendations(system_prompt=system_prompt, prompt=prompt, groq_api_key=GROQ_API_KEY)
+        
+        if not quick_analysis:
+            raise ValueError("No recommendations generated")
+        
+        return quick_analysis
+        
+
+    except Exception as e:
+        print(f"Error generating prep for {opponent_id}: {e}")
+        return f"❌ Could not analyze {opponent_id}: {str(e)}"
 
 
 def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
@@ -279,9 +359,12 @@ def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
                 opponent_color = "white" if user_color == "black" else "black"
 
 
+                # Get user's access token for API calls
+                user_access_token = user.get("access_token")
+                
                 # Schedule the async part to run on the main event loop
                 asyncio.run_coroutine_threadsafe(
-                    handle_game_start_event(game_id, user_id, opponent_id, opponent_color), loop
+                    handle_game_start_event(game_id, user_id, opponent_id, opponent_color, user_access_token), loop
                 )
                 # You could optionally wait for the result, but it's not necessary here
                 # future.result()
@@ -347,24 +430,24 @@ async def analyze_opponent_games(opponent_id: str, token: str, max_games: int = 
     return brief
 '''
 
-async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, opponent_color: str):
+async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, opponent_color: str, user_access_token: str = None):
     """Asynchronous handler for game start events."""
 
     print("\n in the handle_game_start_event function")
 
     # Check DB if a recent analysis already exists
-    result = supabase.table("analytics").select("*").eq("target_user", opponent_id).execute()
+    #result = supabase.table("analytics").select("*").eq("target_user", opponent_id).execute()
+    result = supabase.table("analytics").select("*").eq("target_user", opponent_id).eq("color", opponent_color).execute()
 
     if result.data and len(result.data) > 0:
         user_data = result.data[0]
         if datetime.fromisoformat(user_data["created_at"].replace("Z", "+00:00")) > datetime.now(timezone.utc) - timedelta(days=7):
-            print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent_id}")
-            return
+            print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent_id} and color {opponent_color}")
+            return user_data["prep_text"]
+
 
     # Fetch games, analyze, and generate the preparation text
-    #prep_text = await analyze_opponent_games(opponent, lichess_api_token, max_games=50)
-    prep_text = await generate_prep(opponent_id, opponent_color)
-
+    prep_text = await generate_prep(opponent_id, opponent_color, user_access_token)
 
     # Store in Supabase
     data = {
@@ -383,6 +466,11 @@ async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, 
         print(f"DEBUG: Generated prep for opponent {opponent_id} in game {game_id}")
     except APIError as e:
         print(f"DEBUG: Database error: {e}")
+    
+    # TODO:
+    # "tell" frontend that new data is available in DB 
+    # so that it can be displayed in dashboard
+    # simple "refresh" which then calls function to get games from DB should be enough i guess
 
 
 ############### Define API Endpoints ###############
@@ -656,6 +744,73 @@ async def get_listening_status(user: dict = Depends(require_auth)):
         "remaining_seconds": 0,
         "duration": 0
     }
+
+@app.post("/api/analyze_user")
+async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
+    """Analyze the current user for both white and black pieces"""
+    try:
+        user_id = user["id"]
+        color = request_data.get("color", "white")  # "white" or "black"
+        force_refresh = request_data.get("force_refresh", False)
+        
+        # Check if analysis already exists in DB and is recent (within 7 days)
+        if not force_refresh:
+            result = supabase.table("analytics").select("*").eq("target_user", user_id).eq("color", color).execute()
+            
+            if result.data and len(result.data) > 0:
+                analysis_data = result.data[0]
+                created_at = datetime.fromisoformat(analysis_data["created_at"].replace("Z", "+00:00"))
+                if created_at > datetime.now(timezone.utc) - timedelta(days=7):
+                    print(f"Using existing analysis for user {user_id} ({color})")
+                    return {
+                        "success": True,
+                        "user_id": user_id,
+                        "color": color,
+                        "preparation": analysis_data["prep_text"],
+                        "analyzed_at": analysis_data["created_at"],
+                        "cached": True
+                    }
+        
+        # Get user's access token
+        user_access_token = user.get("access_token")
+        if not user_access_token:
+            raise HTTPException(status_code=401, detail="No valid access token")
+        
+        # Generate preparation analysis for the user themselves
+        prep_text = await generate_prep(user_id, color, user_access_token)
+        
+        # create random game_id since no game is active
+        game_id = secrets.token_urlsafe(16)
+        
+        # Store in Supabase
+        data = {
+            "game_id": game_id,
+            "target_user": user_id,
+            "created_by": user_id,
+            "color": color,
+            "prep_text": prep_text,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        
+        try:
+            supabase.table("analytics").upsert(data, on_conflict="game_id").execute()
+            print(f"Stored user analysis for {user_id} ({color})")
+        except APIError as e:
+            print(f"Database error storing user analysis: {e}")
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "color": color,
+            "preparation": prep_text,
+            "analyzed_at": datetime.now(timezone.utc).isoformat(),
+            "cached": False
+        }
+        
+    except Exception as e:
+        print(f"Error in analyze_user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 if __name__ == "__main__":

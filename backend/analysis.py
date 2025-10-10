@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-
 import httpx
 import json
 import asyncio
@@ -512,10 +511,11 @@ async def main():
         token = "MY_TOKEN"
         #target = "Gogi78Sokol".lower()
         #target = "tjayada".lower()
-        target = "chessiandoceo".lower()
+        #target = "chessiandoceo".lower()
+        target = "meangirlPA".lower()
         #color = "black
         color = "white"
-        num = 100
+        num = 50
         
         all_feats = []
         async for game in stream_games_for_user(target, token, color, max_games=num):
