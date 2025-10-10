@@ -317,7 +317,7 @@ async def generate_prep(opponent_id: str, opponent_color: str, user_access_token
         system_prompt = get_system_prompt()
 
         # Step 4: generate recommendations
-        quick_analysis = await generate_llm_recommendations(system_prompt=system_prompt, prompt=prompt, groq_api_key=GROQ_API_KEY)
+        quick_analysis = generate_llm_recommendations(system_prompt=system_prompt, prompt=prompt, groq_api_key=GROQ_API_KEY)
         
         if not quick_analysis:
             raise ValueError("No recommendations generated")
@@ -441,9 +441,25 @@ async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, 
 
     if result.data and len(result.data) > 0:
         user_data = result.data[0]
-        if datetime.fromisoformat(user_data["created_at"].replace("Z", "+00:00")) > datetime.now(timezone.utc) - timedelta(days=7):
-            print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent_id} and color {opponent_color}")
-            return user_data["prep_text"]
+        try:
+            # Parse the datetime string and ensure it's timezone-aware
+            created_at_str = user_data["created_at"]
+            if created_at_str.endswith('Z'):
+                created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+            else:
+                created_at = datetime.fromisoformat(created_at_str)
+            
+            # Ensure both datetimes are timezone-aware for comparison
+            now = datetime.now(timezone.utc)
+            if created_at.tzinfo is None:
+                # If created_at is naive, assume it's UTC
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            
+            if created_at > now - timedelta(days=7):
+                print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent_id} and color {opponent_color}")
+                return user_data["prep_text"]
+        except (ValueError, TypeError) as e:
+            print(f"Error parsing datetime for existing analysis: {e}, generating new analysis")
 
 
     # Fetch games, analyze, and generate the preparation text
@@ -759,17 +775,32 @@ async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
             
             if result.data and len(result.data) > 0:
                 analysis_data = result.data[0]
-                created_at = datetime.fromisoformat(analysis_data["created_at"].replace("Z", "+00:00"))
-                if created_at > datetime.now(timezone.utc) - timedelta(days=7):
-                    print(f"Using existing analysis for user {user_id} ({color})")
-                    return {
-                        "success": True,
-                        "user_id": user_id,
-                        "color": color,
-                        "preparation": analysis_data["prep_text"],
-                        "analyzed_at": analysis_data["created_at"],
-                        "cached": True
-                    }
+                try:
+                    # Parse the datetime string and ensure it's timezone-aware
+                    created_at_str = analysis_data["created_at"]
+                    if created_at_str.endswith('Z'):
+                        created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                    else:
+                        created_at = datetime.fromisoformat(created_at_str)
+                    
+                    # Ensure both datetimes are timezone-aware for comparison
+                    now = datetime.now(timezone.utc)
+                    if created_at.tzinfo is None:
+                        # If created_at is naive, assume it's UTC
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                    
+                    if created_at > now - timedelta(days=7):
+                        print(f"Using existing analysis for user {user_id} ({color})")
+                        return {
+                            "success": True,
+                            "user_id": user_id,
+                            "color": color,
+                            "preparation": analysis_data["prep_text"],
+                            "analyzed_at": analysis_data["created_at"],
+                            "cached": True
+                        }
+                except (ValueError, TypeError) as e:
+                    print(f"Error parsing datetime for existing analysis: {e}, generating new analysis")
         
         # Get user's access token
         user_access_token = user.get("access_token")
@@ -809,6 +840,60 @@ async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
         
     except Exception as e:
         print(f"Error in analyze_user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/analysis")
+async def get_user_analysis(user: dict = Depends(require_auth)):
+    """Get existing user analysis from database for both colors"""
+    try:
+        user_id = user["id"]
+        
+        # Fetch both white and black analysis
+        result = supabase.table("analytics").select("*").eq("target_user", user_id).execute()
+        
+        analysis_data = {
+            "white": None,
+            "black": None
+        }
+        
+        if result.data:
+            for analysis in result.data:
+                color = analysis["color"]
+                if color in analysis_data:
+                    # Check if analysis is recent (within 7 days)
+                    try:
+                        # Parse the datetime string and ensure it's timezone-aware
+                        created_at_str = analysis["created_at"]
+                        if created_at_str.endswith('Z'):
+                            created_at = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
+                        else:
+                            created_at = datetime.fromisoformat(created_at_str)
+                        
+                        # Ensure both datetimes are timezone-aware for comparison
+                        now = datetime.now(timezone.utc)
+                        if created_at.tzinfo is None:
+                            # If created_at is naive, assume it's UTC
+                            created_at = created_at.replace(tzinfo=timezone.utc)
+                        
+                        if created_at > now - timedelta(days=7):
+                            analysis_data[color] = {
+                                "preparation": analysis["prep_text"],
+                                "analyzed_at": analysis["created_at"],
+                                "cached": True
+                            }
+                    except (ValueError, TypeError) as e:
+                        print(f"Error parsing datetime for analysis {analysis.get('game_id', 'unknown')}: {e}")
+                        continue
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "analysis": analysis_data
+        }
+        
+    except Exception as e:
+        print(f"Error fetching user analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

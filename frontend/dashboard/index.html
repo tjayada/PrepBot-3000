@@ -150,6 +150,132 @@
             color: #888;
             font-style: italic;
         }
+        
+        /* Analysis section styles */
+        .analysis-container {
+            display: none;
+            margin-top: 30px;
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .analysis-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 15px;
+        }
+        
+        .analysis-title {
+            font-size: 24px;
+            color: #2c3e50;
+            margin: 0;
+        }
+        
+        .analysis-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .analysis-controls button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0;
+        }
+        
+        .analysis-controls button:hover {
+            background: #2980b9;
+        }
+        
+        .analysis-controls button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .analysis-column {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .analysis-column.white {
+            border-color: #fff;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        }
+        
+        .analysis-column.black {
+            border-color: #343a40;
+            background: linear-gradient(135deg, #343a40 0%, #495057 100%);
+            color: white;
+        }
+        
+        .column-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-align: center;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .column-header.white {
+            background: #fff;
+            color: #343a40;
+            border: 2px solid #dee2e6;
+        }
+        
+        .column-header.black {
+            background: #000;
+            color: #fff;
+            border: 2px solid #495057;
+        }
+        
+        .analysis-content {
+            line-height: 1.6;
+            white-space: pre-wrap;
+            font-size: 14px;
+        }
+        
+        .analysis-loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+        }
+        
+        .analysis-error {
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #fcc;
+            text-align: center;
+        }
+        
+        .analysis-refresh-info {
+            font-size: 12px;
+            color: #888;
+            margin-top: 10px;
+            text-align: center;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -216,6 +342,45 @@
         <div id="countdown-status" class="countdown-status">Waiting for game to start</div>
     </div>
     
+    <!-- User Analysis Section -->
+    <div id="analysis-container" class="analysis-container">
+        <div class="analysis-header">
+            <h2 class="analysis-title">Your Game Analysis</h2>
+            <div class="analysis-controls">
+                <button id="load-analysis-btn" onclick="loadUserAnalysis()">Load Analysis</button>
+                <button id="refresh-analysis-btn" onclick="refreshUserAnalysis()" disabled>Refresh Analysis</button>
+            </div>
+        </div>
+        
+        <div id="analysis-loading" class="analysis-loading" style="display: none;">
+            Analyzing your games... This may take a moment.
+        </div>
+        
+        <div id="analysis-error" class="analysis-error" style="display: none;">
+            <p id="analysis-error-message"></p>
+        </div>
+        
+        <div id="analysis-grid" class="analysis-grid" style="display: none;">
+            <div class="analysis-column white">
+                <div class="column-header white">♔ White Pieces</div>
+                <div id="white-analysis" class="analysis-content">
+                    <div class="analysis-loading">Loading white analysis...</div>
+                </div>
+            </div>
+            
+            <div class="analysis-column black">
+                <div class="column-header black">♚ Black Pieces</div>
+                <div id="black-analysis" class="analysis-content">
+                    <div class="analysis-loading">Loading black analysis...</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="analysis-refresh-info" class="analysis-refresh-info" style="display: none;">
+            Analysis data is cached for 7 days. Click "Refresh Analysis" to get updated insights.
+        </div>
+    </div>
+    
 
 
     <script>
@@ -235,6 +400,7 @@
 
             loadUserStats();
             checkListeningStatus(); // Check if already listening
+            loadUserAnalysis(); // Load user analysis automatically
         });
 
         document.getElementById('switch-toggle').addEventListener('change', async function() {
@@ -508,6 +674,182 @@
             
             // Redirect to login page
             window.location.href = '/';
+        }
+
+        // Analysis functions
+        async function loadUserAnalysis() {
+            try {
+                showAnalysisLoading();
+                hideAnalysisError();
+                
+                console.log('Loading user analysis...');
+                
+                // First, try to get existing analysis from database
+                const response = await fetch(`${API_BASE_URL}/api/user/analysis`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    showAnalysisError('Authentication required. Please log in again.');
+                    return;
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('Analysis data:', data.analysis);
+                    
+                    // Check if we have any existing analysis
+                    const hasWhiteAnalysis = data.analysis.white !== null;
+                    const hasBlackAnalysis = data.analysis.black !== null;
+                    
+                    if (hasWhiteAnalysis && hasBlackAnalysis) {
+                        // Display existing analysis
+                        displayAnalysis(data.analysis);
+                        document.getElementById('refresh-analysis-btn').disabled = false;
+                        document.getElementById('analysis-refresh-info').style.display = 'block';
+                    } else {
+                        // Generate missing analysis
+                        await generateMissingAnalysis(hasWhiteAnalysis, hasBlackAnalysis);
+                    }
+                } else {
+                    showAnalysisError(data.error || 'Failed to load analysis');
+                }
+
+            } catch (error) {
+                console.error('Error loading user analysis:', error);
+                showAnalysisError('Network error. Please check your connection.');
+            }
+        }
+
+        async function generateMissingAnalysis(hasWhite, hasBlack) {
+            const promises = [];
+            
+            if (!hasWhite) {
+                promises.push(analyzeUserColor('white'));
+            }
+            
+            if (!hasBlack) {
+                promises.push(analyzeUserColor('black'));
+            }
+            
+            try {
+                const results = await Promise.all(promises);
+                
+                // Reload analysis to get updated data
+                await loadUserAnalysis();
+                
+            } catch (error) {
+                console.error('Error generating analysis:', error);
+                showAnalysisError('Failed to generate analysis: ' + error.message);
+            }
+        }
+
+        async function analyzeUserColor(color) {
+            console.log(`Analyzing user for ${color} pieces...`);
+            
+            const response = await fetch(`${API_BASE_URL}/api/analyze_user`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ color: color })
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to analyze ${color} pieces`);
+            }
+
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || `Failed to analyze ${color} pieces`);
+            }
+            
+            return data;
+        }
+
+        function displayAnalysis(analysisData) {
+            hideAnalysisLoading();
+            hideAnalysisError();
+            
+            // Show analysis container and grid
+            document.getElementById('analysis-container').style.display = 'block';
+            document.getElementById('analysis-grid').style.display = 'grid';
+            document.getElementById('refresh-analysis-btn').disabled = false;
+            document.getElementById('analysis-refresh-info').style.display = 'block';
+            
+            // Display white analysis
+            const whiteAnalysisDiv = document.getElementById('white-analysis');
+            if (analysisData.white) {
+                whiteAnalysisDiv.innerHTML = analysisData.white.preparation;
+                whiteAnalysisDiv.style.color = '#333';
+            } else {
+                whiteAnalysisDiv.innerHTML = '<div class="analysis-loading">No analysis available for white pieces.</div>';
+            }
+            
+            // Display black analysis
+            const blackAnalysisDiv = document.getElementById('black-analysis');
+            if (analysisData.black) {
+                blackAnalysisDiv.innerHTML = analysisData.black.preparation;
+                blackAnalysisDiv.style.color = '#fff';
+            } else {
+                blackAnalysisDiv.innerHTML = '<div class="analysis-loading">No analysis available for black pieces.</div>';
+            }
+        }
+
+        async function refreshUserAnalysis() {
+            try {
+                showAnalysisLoading();
+                hideAnalysisError();
+                
+                document.getElementById('refresh-analysis-btn').disabled = true;
+                
+                console.log('Refreshing user analysis...');
+                
+                // Generate fresh analysis for both colors
+                const promises = [
+                    analyzeUserColor('white'),
+                    analyzeUserColor('black')
+                ];
+                
+                await Promise.all(promises);
+                
+                // Reload analysis to get updated data
+                await loadUserAnalysis();
+                
+            } catch (error) {
+                console.error('Error refreshing analysis:', error);
+                showAnalysisError('Failed to refresh analysis: ' + error.message);
+                document.getElementById('refresh-analysis-btn').disabled = false;
+            }
+        }
+
+        function showAnalysisLoading() {
+            document.getElementById('analysis-loading').style.display = 'block';
+            document.getElementById('analysis-grid').style.display = 'none';
+            document.getElementById('analysis-error').style.display = 'none';
+            document.getElementById('analysis-refresh-info').style.display = 'none';
+        }
+
+        function hideAnalysisLoading() {
+            document.getElementById('analysis-loading').style.display = 'none';
+        }
+
+        function showAnalysisError(message) {
+            hideAnalysisLoading();
+            document.getElementById('analysis-error').style.display = 'block';
+            document.getElementById('analysis-grid').style.display = 'none';
+            document.getElementById('analysis-error-message').textContent = message;
+            document.getElementById('refresh-analysis-btn').disabled = false;
+        }
+
+        function hideAnalysisError() {
+            document.getElementById('analysis-error').style.display = 'none';
         }
     </script>
 </body>
