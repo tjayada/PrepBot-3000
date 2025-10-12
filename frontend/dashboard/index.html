@@ -276,6 +276,151 @@
             text-align: center;
             font-style: italic;
         }
+        
+        /* Analysis History Table Styles */
+        .analysis-history-container {
+            display: block;
+            margin-top: 30px;
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .analysis-history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 15px;
+        }
+        
+        .analysis-history-title {
+            font-size: 24px;
+            color: #2c3e50;
+            margin: 0;
+        }
+        
+        .analysis-history-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .analysis-history-controls button {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0;
+        }
+        
+        .analysis-history-controls button:hover {
+            background: #229954;
+        }
+        
+        .analysis-history-controls button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .analysis-history-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+        }
+        
+        .analysis-history-table th,
+        .analysis-history-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .analysis-history-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+        }
+        
+        .analysis-history-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .analysis-history-table .opponent-cell {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        .analysis-history-table .color-cell {
+            text-align: center;
+            font-weight: bold;
+        }
+        
+        .analysis-history-table .color-cell.white {
+            color: #2c3e50;
+        }
+        
+        .analysis-history-table .color-cell.black {
+            color: #34495e;
+        }
+        
+        .analysis-history-table .date-cell {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .analysis-history-table .prep-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 13px;
+            line-height: 1.4;
+            color: #2c3e50;
+        }
+        
+        .analysis-history-table .prep-cell:hover {
+            white-space: normal;
+            overflow: visible;
+            background: #fff;
+            color: #2c3e50;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 10;
+            position: relative;
+        }
+        
+        .analysis-history-loading {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 40px;
+        }
+        
+        .analysis-history-error {
+            background: #fee;
+            color: #c00;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #fcc;
+            text-align: center;
+        }
+        
+        .analysis-history-empty {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 40px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 2px dashed #ddd;
+        }
     </style>
 </head>
 <body>
@@ -381,6 +526,43 @@
         </div>
     </div>
     
+    <!-- Analysis History Section -->
+    <div id="analysis-history-container" class="analysis-history-container">
+        <div class="analysis-history-header">
+            <h2 class="analysis-history-title">Opponent Analysis History</h2>
+            <div class="analysis-history-controls">
+                <button id="load-history-btn" onclick="loadAnalysisHistory()">Load History</button>
+                <button id="refresh-history-btn" onclick="refreshAnalysisHistory()" disabled>Refresh</button>
+            </div>
+        </div>
+        
+        <div id="analysis-history-loading" class="analysis-history-loading" style="display: none;">
+            Loading analysis history...
+        </div>
+        
+        <div id="analysis-history-error" class="analysis-history-error" style="display: none;">
+            <p id="analysis-history-error-message"></p>
+        </div>
+        
+        <div id="analysis-history-empty" class="analysis-history-empty" style="display: none;">
+            <p>No opponent analysis history found.</p>
+            <p>Start listening for games to analyze your opponents!</p>
+        </div>
+        
+        <table id="analysis-history-table" class="analysis-history-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Opponent</th>
+                    <th>Color</th>
+                    <th>Analysis Result</th>
+                </tr>
+            </thead>
+            <tbody id="analysis-history-tbody">
+                <!-- Table rows will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
 
 
     <script>
@@ -391,6 +573,10 @@
         let countdownInterval = null;
         let listeningStartTime = null;
         let listeningDuration = 20; // minutes
+        
+        // Global variables for WebSocket connection
+        let websocket = null;
+        let currentUserId = null;
 
         // Load user stats when page loads
         document.addEventListener('DOMContentLoaded', function() {
@@ -401,6 +587,7 @@
             loadUserStats();
             checkListeningStatus(); // Check if already listening
             loadUserAnalysis(); // Load user analysis automatically
+            loadAnalysisHistory(); // Load analysis history automatically
         });
 
         document.getElementById('switch-toggle').addEventListener('change', async function() {
@@ -430,6 +617,8 @@
                     // Start countdown timer
                     listeningStartTime = new Date();
                     startCountdownTimer();
+                    
+                    // WebSocket connection is already established, no polling needed
                     
                     // Show countdown container
                     document.getElementById('countdown-container').style.display = 'block';
@@ -463,6 +652,8 @@
                     
                     // Stop countdown timer
                     stopCountdownTimer();
+                    
+                    // WebSocket connection remains open for real-time updates
                     
                     // Hide countdown container
                     document.getElementById('countdown-container').style.display = 'none';
@@ -620,6 +811,9 @@
 
                 if (data.success) {
                     displayStats(data.data);
+                    // Establish WebSocket connection after getting user stats
+                    currentUserId = data.data.username;
+                    connectWebSocket();
                 } else {
                     showError(data.error || 'Failed to load stats');
                 }
@@ -671,6 +865,9 @@
             } catch (error) {
                 console.log('Logout request failed, but redirecting anyway');
             }
+            
+            // Disconnect WebSocket before redirecting
+            disconnectWebSocket();
             
             // Redirect to login page
             window.location.href = '/';
@@ -850,6 +1047,206 @@
 
         function hideAnalysisError() {
             document.getElementById('analysis-error').style.display = 'none';
+        }
+
+        // Analysis History Functions
+        async function loadAnalysisHistory() {
+            try {
+                showHistoryLoading();
+                hideHistoryError();
+                
+                console.log('Loading analysis history...');
+                
+                const response = await fetch(`${API_BASE_URL}/api/user/analysis/history`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.status === 401) {
+                    showHistoryError('Authentication required. Please log in again.');
+                    return;
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    console.log('Analysis history data:', data.analysis_history);
+                    displayAnalysisHistory(data.analysis_history);
+                    document.getElementById('refresh-history-btn').disabled = false;
+                } else {
+                    showHistoryError(data.error || 'Failed to load analysis history');
+                }
+
+            } catch (error) {
+                console.error('Error loading analysis history:', error);
+                showHistoryError('Network error. Please check your connection.');
+            }
+        }
+
+        function displayAnalysisHistory(historyData) {
+            hideHistoryLoading();
+            hideHistoryError();
+            
+            if (!historyData || historyData.length === 0) {
+                // Show empty state
+                document.getElementById('analysis-history-empty').style.display = 'block';
+                document.getElementById('analysis-history-table').style.display = 'none';
+                return;
+            }
+            
+            // Hide empty state and show table
+            document.getElementById('analysis-history-empty').style.display = 'none';
+            document.getElementById('analysis-history-table').style.display = 'table';
+            
+            // Populate table
+            const tbody = document.getElementById('analysis-history-tbody');
+            tbody.innerHTML = '';
+            
+            historyData.forEach(analysis => {
+                const row = document.createElement('tr');
+                
+                // Format date
+                const date = new Date(analysis.created_at);
+                const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                
+                // Create color display
+                const colorDisplay = analysis.color === 'white' ? '♔ White' : '♚ Black';
+                const colorClass = analysis.color === 'white' ? 'white' : 'black';
+                
+                row.innerHTML = `
+                    <td class="date-cell">${formattedDate}</td>
+                    <td class="opponent-cell">${analysis.opponent}</td>
+                    <td class="color-cell ${colorClass}">${colorDisplay}</td>
+                    <td class="prep-cell" title="${analysis.preparation}">${analysis.preparation}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+        }
+
+        async function refreshAnalysisHistory() {
+            try {
+                showHistoryLoading();
+                hideHistoryError();
+                
+                document.getElementById('refresh-history-btn').disabled = true;
+                
+                console.log('Refreshing analysis history...');
+                
+                // Reload history
+                await loadAnalysisHistory();
+                
+            } catch (error) {
+                console.error('Error refreshing analysis history:', error);
+                showHistoryError('Failed to refresh analysis history: ' + error.message);
+                document.getElementById('refresh-history-btn').disabled = false;
+            }
+        }
+
+        function showHistoryLoading() {
+            document.getElementById('analysis-history-loading').style.display = 'block';
+            document.getElementById('analysis-history-table').style.display = 'none';
+            document.getElementById('analysis-history-error').style.display = 'none';
+            document.getElementById('analysis-history-empty').style.display = 'none';
+        }
+
+        function hideHistoryLoading() {
+            document.getElementById('analysis-history-loading').style.display = 'none';
+        }
+
+        function showHistoryError(message) {
+            hideHistoryLoading();
+            document.getElementById('analysis-history-error').style.display = 'block';
+            document.getElementById('analysis-history-table').style.display = 'none';
+            document.getElementById('analysis-history-error-message').textContent = message;
+            document.getElementById('refresh-history-btn').disabled = false;
+        }
+
+        function hideHistoryError() {
+            document.getElementById('analysis-history-error').style.display = 'none';
+        }
+
+        // WebSocket Functions
+        function connectWebSocket() {
+            if (!currentUserId) {
+                console.error('No user ID available for WebSocket connection');
+                return;
+            }
+            
+            const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+            websocket = new WebSocket(`${wsUrl}/ws`);
+            
+            websocket.onopen = function(event) {
+                console.log('WebSocket connected');
+            };
+            
+            websocket.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('WebSocket message received:', data);
+                    
+                    if (data.type === 'new_analysis') {
+                        // Refresh the analysis history when new analysis is completed
+                        loadAnalysisHistory();
+                        showNewAnalysisNotification(data);
+                    }
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+            
+            websocket.onclose = function(event) {
+                console.log('WebSocket disconnected');
+                // Attempt to reconnect after 3 seconds
+                setTimeout(() => {
+                    if (currentUserId) {
+                        connectWebSocket();
+                    }
+                }, 3000);
+            };
+            
+            websocket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+        }
+
+        function showNewAnalysisNotification(wsData = null) {
+            // Create a temporary notification
+            const notification = document.createElement('div');
+            notification.style.position = 'fixed';
+            notification.style.top = '20px';
+            notification.style.right = '20px';
+            notification.style.background = '#27ae60';
+            notification.style.color = 'white';
+            notification.style.padding = '15px 20px';
+            notification.style.borderRadius = '6px';
+            notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+            notification.style.zIndex = '10000';
+            notification.style.fontWeight = 'bold';
+            notification.style.fontSize = '14px';
+            
+            // Use WebSocket data if available, otherwise default message
+            const message = wsData ? wsData.message : '🎉 New opponent analysis completed!';
+            notification.innerHTML = message;
+            
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 4000);
         }
     </script>
 </body>

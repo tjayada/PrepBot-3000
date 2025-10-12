@@ -1,5 +1,6 @@
 import asyncio
-from fastapi import FastAPI, Request, Depends, HTTPException, Response
+from chess import Status
+from fastapi import Cookie, FastAPI, Request, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -15,9 +16,10 @@ from postgrest import APIError
 from supabase import create_client, Client
 import berserk
 import jwt
-from typing import Optional
+from typing import Optional, Dict
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
+import json
 
 # Import our analysis modules
 from analysis import generate_insights, stream_games_for_user, extract_features
@@ -89,6 +91,31 @@ PORT = int(os.getenv("PORT", 8000))
 
 executor = ThreadPoolExecutor(max_workers=10)
 check_stream_events_queue = {}
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, user_id: str):
+        self.active_connections[user_id] = websocket
+        print(f"WebSocket connected for user: {user_id}")
+
+    def disconnect(self, user_id: str):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
+            print(f"WebSocket disconnected for user: {user_id}")
+
+    async def send_personal_message(self, message: dict, user_id: str):
+        if user_id in self.active_connections:
+            try:
+                await self.active_connections[user_id].send_text(json.dumps(message))
+                print(f"Sent WebSocket message to user {user_id}: {message}")
+            except Exception as e:
+                print(f"Error sending WebSocket message to {user_id}: {e}")
+                self.disconnect(user_id)
+
+manager = ConnectionManager()
 
 ############### Define Functions ###############
 
@@ -480,13 +507,19 @@ async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, 
     try:
         supabase.table("analytics").upsert(data, on_conflict="game_id").execute()
         print(f"DEBUG: Generated prep for opponent {opponent_id} in game {game_id}")
+        
+        # Send WebSocket notification to the user about new analysis
+        notification = {
+            "type": "new_analysis",
+            "opponent": opponent_id,
+            "color": opponent_color,
+            "game_id": game_id,
+            "message": f"New analysis completed for {opponent_id} ({opponent_color})"
+        }
+        await manager.send_personal_message(notification, user_id)
+        
     except APIError as e:
         print(f"DEBUG: Database error: {e}")
-    
-    # TODO:
-    # "tell" frontend that new data is available in DB 
-    # so that it can be displayed in dashboard
-    # simple "refresh" which then calls function to get games from DB should be enough i guess
 
 
 ############### Define API Endpoints ###############
@@ -715,6 +748,34 @@ async def debug_cookies(request: Request):
     }
 
 
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket, session_token: Optional[str] = Cookie(None)):
+    """WebSocket endpoint for real-time analysis notifications"""
+    # Verify the user is authenticated by checking their session token
+    user_data = verify_session_token(session_token)
+    if not user_data:
+        # Reject the connection if authentication fails
+        await websocket.close(code=Status.WS_1008_POLICY_VIOLATION)
+        return
+    
+    # Accept the WebSocket connection only if authentication succeeded
+    await websocket.accept()
+    
+    user_id = user_data["user_id"]
+
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            # Keep the connection alive and handle any incoming messages
+            #data = await websocket.receive_text()
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+    except Exception as e:
+        print(f"WebSocket error for user {user_id}: {e}")
+        manager.disconnect(user_id)
+
+
 @app.post("/api/cancel_listening")
 async def cancel_listening(user: dict = Depends(require_auth)):
     user_id = user["id"]
@@ -894,6 +955,40 @@ async def get_user_analysis(user: dict = Depends(require_auth)):
         
     except Exception as e:
         print(f"Error fetching user analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/analysis/history")
+async def get_user_analysis_history(user: dict = Depends(require_auth)):
+    """Get all analysis results created by the user (for opponents only, excluding self-analysis)"""
+    try:
+        user_id = user["id"]
+        
+        # Fetch all analysis records where this user is the creator but target_user is different (opponents only)
+        result = supabase.table("analytics").select("*").eq("created_by", user_id).neq("target_user", user_id).order("created_at", desc=True).execute()
+        
+        analysis_history = []
+        
+        if result.data:
+            for analysis in result.data:
+                analysis_history.append({
+                    "game_id": analysis["game_id"],
+                    "opponent": analysis["target_user"],
+                    "color": analysis["color"],
+                    "preparation": analysis["prep_text"],
+                    "created_at": analysis["created_at"],
+                    "analyzed_at": analysis["created_at"]  # For compatibility
+                })
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "analysis_history": analysis_history,
+            "total_count": len(analysis_history)
+        }
+        
+    except Exception as e:
+        print(f"Error fetching user analysis history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
