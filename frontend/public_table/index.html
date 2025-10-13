@@ -3,78 +3,59 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Public Analysis Table - Lichess Scout</title>
-    <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/components/opponent-analysis-table.css">
+    <title>Public Analysis Table - Lichess Scout</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 0;
-            background: #f8f9fa;
+            background: #2a2a2a;
+            color: #fff;
             min-height: 100vh;
+            overflow-x: hidden;
         }
         
-        /* Navigation Bar */
-        .navbar {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            color: white;
-            padding: 1rem 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
-        }
-        
-        .navbar-content {
-            max-width: 1200px;
+        .main-content {
+            max-width: 1000px;
             margin: 0 auto;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 0 20px;
+            margin-bottom: 20px;
+            padding: 10px;
+            position: sticky;
+            top: 0;
+            background: transparent;
+            z-index: 100;
+            border-bottom: 1px solid #444;
         }
         
-        .navbar-brand {
-            font-size: 24px;
-            font-weight: bold;
-            text-decoration: none;
-            color: white;
+        .header h1 {
+            margin: 0;
+            color: #fff;
+            font-size: 28px;
+            background-color: transparent;
         }
         
-        .navbar-brand:hover {
-            color: #ecf0f1;
-        }
-        
-        .navbar-nav {
+        .nav-buttons {
             display: flex;
-            gap: 20px;
-            align-items: center;
+            gap: 10px;
         }
         
-        .navbar-nav a {
-            color: white;
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-        }
-        
-        .navbar-nav a:hover {
-            background-color: rgba(255,255,255,0.1);
-        }
-        
-        .navbar-nav a.active {
-            background-color: #e74c3c;
-        }
-        
-        .login-btn {
-            background: #e74c3c;
+        .nav-btn {
+            background: #3498db;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 8px 16px;
             border-radius: 4px;
             cursor: pointer;
             text-decoration: none;
@@ -82,12 +63,20 @@
             transition: background-color 0.3s;
         }
         
-        .login-btn:hover {
+        .nav-btn:hover {
+            background: #2980b9;
+        }
+        
+        .nav-btn.active {
+            background: #e74c3c;
+        }
+        
+        .nav-btn.active:hover {
             background: #c0392b;
         }
         
         .logout-btn {
-            background: #95a5a6;
+            background: #e74c3c;
             color: white;
             border: none;
             padding: 8px 16px;
@@ -99,14 +88,28 @@
         }
         
         .logout-btn:hover {
-            background: #7f8c8d;
+            background: #c0392b;
         }
         
-        /* Main Content */
-        .main-content {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 100px 20px 20px 20px; /* Add top padding to account for fixed navbar */
+        .login-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        
+        .login-btn:hover {
+            background: #229954;
+        }
+        
+        .public-content-wrapper {
+            overflow-y: auto;
+            flex: 1;
         }
         
         
@@ -114,70 +117,72 @@
         .page-header {
             text-align: center;
             margin-bottom: 30px;
-            background: white;
+            background: #333;
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid #444;
         }
         
         .page-header h1 {
-            color: #2c3e50;
+            color: #fff;
             margin: 0 0 10px 0;
             font-size: 2.5rem;
         }
         
-        .page-header p {
-            color: #666;
+        .page-header h2 {
+            color: #ccc;
             margin: 0;
             font-size: 1.1rem;
         }
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
         }
         
         .stat-card {
-            background: white;
+            background: #333;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             text-align: center;
+            border: 1px solid #444;
         }
         
         .stat-number {
             font-size: 2rem;
             font-weight: bold;
-            color: #e74c3c;
+            color: whitesmoke;
             margin-bottom: 5px;
         }
         
         .stat-label {
-            color: #666;
+            color: #ccc;
             font-size: 0.9rem;
         }
         
         .loading {
             text-align: center;
             padding: 40px;
-            color: #666;
-            background: white;
+            color: #ccc;
+            background: #333;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            border: 1px solid #444;
         }
         
         .error {
-            background: #fee;
-            color: #c00;
+            background: #444;
+            color: #ff6b6b;
             padding: 16px;
             border-radius: 4px;
-            border: 1px solid #fcc;
+            border: 1px solid #ff6b6b;
             text-align: center;
             margin: 20px 0;
-            background: white;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         
         /* Chessboard Background */
@@ -211,14 +216,24 @@
         }
         
         /* Responsive Design */
+        @media (max-width: 1200px) {
+            .main-content {
+                padding: 15px;
+            }
+        }
+        
         @media (max-width: 768px) {
-            .navbar-content {
-                flex-direction: column;
-                gap: 15px;
-                padding: 0 15px;
+            .main-content {
+                padding: 15px;
             }
             
-            .navbar-nav {
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+            
+            .nav-buttons {
                 flex-wrap: wrap;
                 justify-content: center;
             }
@@ -228,32 +243,40 @@
             }
             
             .stats-grid {
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
             }
         }
     </style>
 </head>
 <body>
 
-    <!-- Navigation Bar -->
-    <!--
-    <nav class="navbar">
-        <div class="navbar-content">
-            <a href="/" class="navbar-brand">Lichess Scout</a>
-            <div class="navbar-nav">
-                <a href="/public_table" class="active">Public Analysis</a>
-                <a href="/dashboard" id="dashboard-link" style="display: none;">Dashboard</a>
-                <a href="#" id="login-link" class="login-btn" style="display: none;">Login</a>
-                <a href="#" id="logout-link" class="logout-btn" style="display: none;">Logout</a>
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <h1 id="page-title">Public Analysis Database</h1>
+            <div class="nav-buttons">
+                <a href='/dashboard' id="dashboard-link" class="nav-btn" style="display: none;">Dashboard</a>
+                
+                <a href='/dashboard'>
+                    <button  class="logout-btn" style="background-color: #3498db;">Dashboard</button>
+                </a>         
+                
+                <a href='/public_table'>
+                    <button  class="logout-btn" style="background-color: #3498db;">Public Table</button>
+                </a>
+                
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            
             </div>
         </div>
-    </nav>
-    -->
-    <div class="main-content">
-        <div>
-            <h1>Public Analysis Database</h1>
-            <p>Explore all chess opponent analysis from the Lichess Scout community</p>
-        </div>
+        
+        <!-- Public Content -->
+        <div class="public-content-wrapper">
+            <!--
+            <div class="page-header">
+                <h2>Explore all chess opponent analysis from the Lichess Scout community</h2>
+            </div>
+            -->
         
         <!-- Stats Grid -->
         <div class="stats-grid" id="stats-grid">
@@ -285,8 +308,9 @@
             <p id="error-message"></p>
         </div>
         
-        <!-- Component Container -->
-        <div id="analysis-container"></div>
+            <!-- Component Container -->
+            <div id="analysis-container"></div>
+        </div>
     </div>
 
     <!-- Chessboard Background -->
@@ -339,85 +363,22 @@
                 
                 // Format date
                 const date = new Date(analysis.created_at);
-                const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                const formattedDate = date.toLocaleDateString(); //+ ' ' + date.toLocaleTimeString();
                 
                 // Create color display
-                const colorDisplay = analysis.color === 'white' ? '♔ White' : '♚ Black';
+                const colorDisplay = analysis.color === 'white' ? 'White ♔' : 'Black ♚';
                 const colorClass = analysis.color === 'white' ? 'white' : 'black';
                 
                 row.innerHTML = `
                     <td class="date-cell">${formattedDate}</td>
                     <td class="opponent-cell">${analysis.opponent}</td>
                     <td class="color-cell ${colorClass}">${colorDisplay}</td>
-                    <td class="prep-cell" title="${analysis.preparation}">${analysis.preparation}</td>
+                    <td class="prep-cell">${analysis.preparation}</td>
                 `;
                 
                 return row;
             }
             
-            createHTML() {
-                const html = `
-                    <div class="opponent-analysis-table-container">
-                        <div class="opponent-analysis-header">
-                            <h2 class="opponent-analysis-title">Public Analysis Database</h2>
-                            
-                        </div>
-                        
-                        <div id="${this.containerId}-loading" class="opponent-analysis-loading" style="display: none;">
-                            Loading public analysis data...
-                        </div>
-                        
-                        <div id="${this.containerId}-error" class="opponent-analysis-error" style="display: none;">
-                            <p id="${this.containerId}-error-message"></p>
-                        </div>
-                        
-                        <div id="${this.containerId}-empty" class="opponent-analysis-empty" style="display: none;">
-                            <p>No public analysis data found.</p>
-                            <p>Be the first to analyze an opponent!</p>
-                        </div>
-                        
-                        <table id="${this.containerId}-table" class="opponent-analysis-table" style="display: none;">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Opponent</th>
-                                    <th>Color</th>
-                                    <th>Analysis Result</th>
-                                </tr>
-                            </thead>
-                            <tbody id="${this.containerId}-tbody">
-                                <!-- Table rows will be populated by JavaScript -->
-                            </tbody>
-                        </table>
-                        
-                        ${this.options.showControls ? `
-                        <div id="${this.containerId}-pagination" class="pagination-controls" style="display: none;">
-                            <div class="pagination-info">
-                                <span id="${this.containerId}-pagination-info">Showing 1-10 of 50 entries</span>
-                            </div>
-                            <div class="pagination-buttons">
-                                <button id="${this.containerId}-prev-btn" class="prev-btn" disabled>Previous</button>
-                                <span id="${this.containerId}-page-numbers" class="page-numbers"></span>
-                                <button id="${this.containerId}-next-btn" class="next-btn">Next</button>
-                            </div>
-                            <div class="pagination-size">
-                                <label for="${this.containerId}-page-size-select">Show:</label>
-                                <select id="${this.containerId}-page-size-select" class="page-size-select">
-                                    <option value="5" selected >5</option>
-                                    <option value="10">10</option>
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                </select>
-                                <span>per page</span>
-                            </div>
-                        </div>
-                        ` : ''}
-                    </div>
-                `;
-                
-                this.container.innerHTML = html;
-            }
         }
         
         // API Configuration
@@ -478,12 +439,27 @@
             document.getElementById('logout-link').style.display = 'inline-block';
         }
         
+        async function logout() {
+            try {
+                await fetch(`${API_BASE_URL}/api/logout`, {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.log('Logout request failed, but redirecting anyway');
+            }
+            
+            // Redirect to login page
+            window.location.href = '/';
+        }
+        
         function initializeAnalysisTable() {
             // Hide loading
             document.getElementById('loading').style.display = 'none';
             
             // Initialize the component with public API
             analysisTable = new PublicAnalysisTable('analysis-container', {
+                title: 'Public Analysis History',
                 pageSize: 5,
                 showControls: true,
                 apiBaseUrl: API_BASE_URL,
@@ -537,25 +513,6 @@
             document.getElementById('error').style.display = 'none';
         }
         
-        async function logout() {
-            try {
-                await fetch(`${API_BASE_URL}/api/logout`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-            } catch (error) {
-                console.log('Logout request failed, but redirecting anyway');
-            }
-            
-            // Redirect to login page
-            window.location.href = '/';
-        }
-        
-        // Bind logout event
-        document.getElementById('logout-link').addEventListener('click', function(e) {
-            e.preventDefault();
-            logout();
-        });
         
         // Global function to refresh data (can be called from console for testing)
         window.refreshAnalysis = function() {

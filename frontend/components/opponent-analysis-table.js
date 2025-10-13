@@ -9,10 +9,12 @@ class OpponentAnalysisTable {
         
         // Default options
         this.options = {
+            title: 'Opponent Analysis History',
             pageSize: 25,
             showControls: true,
             showManualControls: true, // Show load/refresh buttons by default
             apiBaseUrl: window.location.origin.replace(':3000', ':8000'),
+            apiEndpoint: '/api/user/analysis/history',
             onDataLoad: null,
             onError: null,
             autoRefresh: false,
@@ -43,6 +45,9 @@ class OpponentAnalysisTable {
     createHTML() {
         const html = `
             <div class="opponent-analysis-table-container">
+                <div class="opponent-analysis-header">
+                    <h2 class="opponent-analysis-title">${this.options.title}</h2>
+                </div>
                 
                 <div id="${this.containerId}-loading" class="opponent-analysis-loading" style="display: none;">
                     Loading analysis history...
@@ -57,19 +62,21 @@ class OpponentAnalysisTable {
                     <p>Start listening for games to analyze your opponents!</p>
                 </div>
                 
-                <table id="${this.containerId}-table" class="opponent-analysis-table" style="display: none;">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Opponent</th>
-                            <th>Color</th>
-                            <th class="analysis-result-header">Analysis Result</th>
-                        </tr>
-                    </thead>
-                    <tbody id="${this.containerId}-tbody">
-                        <!-- Table rows will be populated by JavaScript -->
-                    </tbody>
-                </table>
+                <div class="table-wrapper">
+                    <table id="${this.containerId}-table" class="opponent-analysis-table" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Opponent</th>
+                                <th>Color</th>
+                                <th class="analysis-result-header">Analysis Result</th>
+                            </tr>
+                        </thead>
+                        <tbody id="${this.containerId}-tbody">
+                            <!-- Table rows will be populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
                 
                 ${this.options.showControls ? `
                 <div id="${this.containerId}-pagination" class="pagination-controls" style="display: none;">
@@ -126,7 +133,7 @@ class OpponentAnalysisTable {
             
             console.log('Loading analysis history...');
             
-            const response = await fetch(`${this.options.apiBaseUrl}/api/user/analysis/history`, {
+            const response = await fetch(`${this.options.apiBaseUrl}${this.options.apiEndpoint}`, {
                 method: 'GET',
                 credentials: 'include',
                 headers: {
@@ -234,17 +241,17 @@ class OpponentAnalysisTable {
         
         // Format date
         const date = new Date(analysis.created_at);
-        const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        const formattedDate = date.toLocaleDateString(); //+ ' ' + date.toLocaleTimeString();
         
         // Create color display
-        const colorDisplay = analysis.color === 'white' ? '♔ White' : '♚ Black';
+        const colorDisplay = analysis.color === 'white' ? 'White ♔' : 'Black ♚';
         const colorClass = analysis.color === 'white' ? 'white' : 'black';
         
         row.innerHTML = `
             <td class="date-cell">${formattedDate}</td>
             <td class="opponent-cell">${analysis.opponent}</td>
             <td class="color-cell ${colorClass}">${colorDisplay}</td>
-            <td class="prep-cell" title="${analysis.preparation}">${analysis.preparation}</td>
+            <td class="prep-cell">${analysis.preparation}</td>
         `;
         
         return row;
