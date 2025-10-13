@@ -631,34 +631,6 @@ async def callback(request: Request, code: str = None):
     # return {"message": f"Logged in as {user_id}, lichess token: {access_token}"}
 
 
-@app.get("/api/user/stats")
-async def get_user_stats(user: dict = Depends(require_auth)):
-    """Get user stats - requires authentication"""
-    try:
-        print(f"Authenticated user: {user['id']}")
-
-        client = get_lichess_client(user)
-
-        # Fetch from Lichess API using authenticated user's data
-        lichess_data = client.users.get_public_data(user["id"])
-
-        # Return structured JSON
-        return {
-            "success": True,
-            "data": {
-                "username": lichess_data["username"],
-                "rating": {
-                    "blitz": lichess_data["perfs"]["blitz"]["rating"],
-                    "rapid": lichess_data["perfs"]["rapid"]["rating"],
-                    "bullet": lichess_data["perfs"]["bullet"]["rating"],
-                },
-                "games_played": lichess_data["count"]["all"],
-                "wins": lichess_data["count"]["win"],
-            },
-        }
-    except Exception as e:
-        print(f"Error fetching user stats: {e}")
-        return {"success": False, "error": "Failed to fetch user stats"}
 
 
 @app.post("/api/start_listening")
@@ -989,6 +961,38 @@ async def get_user_analysis_history(user: dict = Depends(require_auth)):
         
     except Exception as e:
         print(f"Error fetching user analysis history: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/public/analysis")
+async def get_all_public_analysis():
+    """Get all analysis results from the database (public endpoint, no authentication required)"""
+    try:
+        # Fetch all analysis records from the database, ordered by most recent first
+        result = supabase.table("analytics").select("*").order("created_at", desc=True).execute()
+        
+        analysis_history = []
+        
+        if result.data:
+            for analysis in result.data:
+                analysis_history.append({
+                    "game_id": analysis["game_id"],
+                    "created_by": analysis["created_by"],
+                    "opponent": analysis["target_user"],
+                    "color": analysis["color"],
+                    "preparation": analysis["prep_text"],
+                    "created_at": analysis["created_at"],
+                    "analyzed_at": analysis["created_at"]  # For compatibility
+                })
+        
+        return {
+            "success": True,
+            "analysis_history": analysis_history,
+            "total_count": len(analysis_history)
+        }
+        
+    except Exception as e:
+        print(f"Error fetching public analysis data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

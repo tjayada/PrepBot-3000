@@ -1,0 +1,259 @@
+/* Opponent Analysis Table Component Styles */
+
+.opponent-analysis-table-container {
+    margin-top: 30px;
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.opponent-analysis-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #f0f0f0;
+    padding-bottom: 15px;
+}
+
+.opponent-analysis-title {
+    font-size: 24px;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.opponent-analysis-controls {
+    display: flex;
+    gap: 10px;
+}
+
+.opponent-analysis-controls button {
+    background: #27ae60;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin: 0;
+}
+
+.opponent-analysis-controls button:hover {
+    background: #229954;
+}
+
+.opponent-analysis-controls button:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.opponent-analysis-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: white;
+}
+
+.opponent-analysis-table th,
+.opponent-analysis-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.opponent-analysis-table th {
+    background: #f8f9fa;
+    font-weight: bold;
+    color: #2c3e50;
+    position: sticky;
+    top: 0;
+}
+
+.analysis-result-header {
+    min-width: 400px; 
+}
+
+.opponent-analysis-table .opponent-cell {
+    font-weight: bold;
+    color: #e74c3c;
+}
+
+.opponent-analysis-table .color-cell {
+    text-align: center;
+    font-weight: bold;
+}
+
+.opponent-analysis-table .color-cell.white {
+    color: #2c3e50;
+}
+
+.opponent-analysis-table .color-cell.black {
+    color: #34495e;
+}
+
+.opponent-analysis-table .date-cell {
+    font-size: 12px;
+    color: #666;
+}
+
+.opponent-analysis-table .prep-cell {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #2c3e50;
+    word-break: break-word;
+}
+
+.opponent-analysis-table .prep-cell:hover {
+    white-space: normal;
+    overflow: visible;
+    background: #fff;
+    color: #2c3e50;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    z-index: 10;
+    position: relative;
+}
+
+.opponent-analysis-loading {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 40px;
+}
+
+.opponent-analysis-error {
+    background: #fee;
+    color: #c00;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #fcc;
+    text-align: center;
+}
+
+.opponent-analysis-empty {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 40px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 2px dashed #ddd;
+}
+
+/* Pagination Styles */
+.pagination-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+}
+
+.pagination-info {
+    font-size: 14px;
+    color: #666;
+}
+
+.pagination-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pagination-buttons button {
+    background: #3498db;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin: 0;
+}
+
+.pagination-buttons button:hover:not(:disabled) {
+    background: #2980b9;
+}
+
+.pagination-buttons button:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+}
+
+.pagination-buttons .page-number {
+    background: #fff;
+    color: #333;
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 0 2px;
+    font-size: 14px;
+}
+
+.pagination-buttons .page-number:hover {
+    background: #f8f9fa;
+}
+
+.pagination-buttons .page-number.active {
+    background: #3498db;
+    color: white;
+    border-color: #3498db;
+}
+
+.pagination-size {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 14px;
+    color: #666;
+}
+
+.pagination-size select {
+    padding: 4px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .opponent-analysis-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+    }
+    
+    .pagination-controls {
+        flex-direction: column;
+        gap: 15px;
+        align-items: center;
+    }
+    
+    .pagination-buttons {
+        order: 1;
+    }
+    
+    .pagination-info {
+        order: 2;
+    }
+    
+    .pagination-size {
+        order: 3;
+    }
+    
+    .opponent-analysis-table {
+        font-size: 12px;
+    }
+    
+    .opponent-analysis-table th,
+    .opponent-analysis-table td {
+        padding: 8px;
+    }
+}
