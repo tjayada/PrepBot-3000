@@ -2,10 +2,10 @@
 
 .opponent-analysis-table-container {
     margin-top: 30px;
-    background: #f8f9fa;
+    background: #333;
     border-radius: 8px;
     padding: 24px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
 .table-wrapper {
@@ -23,7 +23,7 @@
 
 .opponent-analysis-title {
     font-size: 24px;
-    color: #2c3e50;
+    color: #ffffff;
     margin: 0;
 }
 
@@ -56,7 +56,7 @@
     width: 100%;
     border-collapse: collapse;
     margin-top: 20px;
-    background: #f8f9fa;
+    background: #2f2f2f;
 }
 
 .opponent-analysis-table th,
@@ -67,9 +67,9 @@
 }
 
 .opponent-analysis-table th {
-    background: #f8f9fa;
+    background: #3a3a3a;
     font-weight: bold;
-    color: #2c3e50;
+    color: #ffffff;
     position: sticky;
     top: 0;
 }
@@ -89,16 +89,16 @@
 }
 
 .opponent-analysis-table .color-cell.white {
-    color: #2c3e50;
+    color: #e0e0e0;
 }
 
 .opponent-analysis-table .color-cell.black {
-    color: #34495e;
+    color: #9fb3c8;
 }
 
 .opponent-analysis-table .date-cell {
     font-size: 12px;
-    color: #666;
+    color: #bbb;
 }
 
 .opponent-analysis-table .prep-cell {
@@ -108,23 +108,23 @@
     text-align: justify;
     font-size: 13px;
     line-height: 1.4;
-    color: #2c3e50;
+    color: #e0e0e0;
     max-width: 400px;
 }
 
 .opponent-analysis-table .prep-cell:hover {
     white-space: normal;
     overflow: visible;
-    background: #fff;
-    color: #2c3e50;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    background: #3a3a3a;
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     z-index: 10;
     position: relative;
 }
 
 .opponent-analysis-loading {
     text-align: center;
-    color: #666;
+    color: #bbb;
     font-style: italic;
     padding: 40px;
 }
@@ -140,12 +140,12 @@
 
 .opponent-analysis-empty {
     text-align: center;
-    color: #666;
+    color: #bbb;
     font-style: italic;
     padding: 40px;
-    background: #f8f9fa;
+    background: #2f2f2f;
     border-radius: 6px;
-    border: 2px dashed #ddd;
+    border: 2px dashed #555;
 }
 
 /* Pagination Styles */
@@ -155,14 +155,14 @@
     align-items: center;
     margin-top: 20px;
     padding: 15px;
-    background: #f8f9fa;
+    background: #333;
     border-radius: 6px;
-    border: 1px solid #dee2e6;
+    border: 1px solid #444;
 }
 
 .pagination-info {
     font-size: 14px;
-    color: #666;
+    color: #bbb;
 }
 
 .pagination-buttons {

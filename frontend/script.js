@@ -1,6 +1,21 @@
+// Shared configuration and helpers
+window.API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000');
+
+window.logout = async function() {
+    try {
+        await fetch(`${window.API_BASE_URL}/api/logout`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch (error) {
+        console.log('Logout request failed, but redirecting anyway');
+    }
+    window.location.href = '/';
+};
+
 const chessboard = document.getElementById('chessboard');
 let lastInteraction = Date.now();
-const inactivityTime = 3000; // 3 seconds inactivity
+const inactivityTime = 5000; // 3 seconds inactivity
 let animationFrameId = null;
 
 // Create chessboard squares

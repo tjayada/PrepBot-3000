@@ -12,20 +12,18 @@
 <body>
 
   <!--Display the main content in the center of the page-->
-  <div class="main-content">
+  <div class="main-content" style="text-align: center;">
       <h1>Lichess Scout</h1>
       <h3>Prep Like A GM In 30 Seconds Or Less</h3>
-      <a id="login-button" href="#" style="margin-top: 20px; display: inline-block">Login with Lichess</a>
+      <a id="login-button" href="#" class="btn btn--success" style="margin-top: 20px;">Login with Lichess</a>
       <div style="margin-top: 30px;">
-        <a href="/public_table" style="margin-top: 20px; display: inline-block; background: #3498db; color: white; transition: background-color 0.3s;">
-          View Public Analysis Database
-        </a>
+        <a href="/public_table" class="btn btn--primary">View Public Analysis Database</a>
       </div>
   </div>
   
   <script>
     // API Configuration - will be set by the server or environment
-    const API_BASE_URL = window.location.origin.replace(':3000', ':8000'); 
+    const API_BASE_URL = window.API_BASE_URL; 
     
     // Set the login button href dynamically
     document.getElementById('login-button').href = `${API_BASE_URL}/auth/login`;

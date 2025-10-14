@@ -3,250 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="/components/opponent-analysis-table.css">
     <title>Public Analysis Table - Lichess Scout</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            background: #2a2a2a;
-            color: #fff;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-        
-        .main-content {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            height: 100vh;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding: 10px;
-            position: sticky;
-            top: 0;
-            background: transparent;
-            z-index: 100;
-            border-bottom: 1px solid #444;
-        }
-        
-        .header h1 {
-            margin: 0;
-            color: #fff;
-            font-size: 28px;
-            background-color: transparent;
-        }
-        
-        .nav-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .nav-btn {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: background-color 0.3s;
-        }
-        
-        .nav-btn:hover {
-            background: #2980b9;
-        }
-        
-        .nav-btn.active {
-            background: #e74c3c;
-        }
-        
-        .nav-btn.active:hover {
-            background: #c0392b;
-        }
-        
-        .logout-btn {
-            background: #e74c3c;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: background-color 0.3s;
-        }
-        
-        .logout-btn:hover {
-            background: #c0392b;
-        }
-        
-        .login-btn {
-            background: #27ae60;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            transition: background-color 0.3s;
-        }
-        
-        .login-btn:hover {
-            background: #229954;
-        }
-        
-        .public-content-wrapper {
-            overflow-y: auto;
-            flex: 1;
-        }
-        
-        
-        
-        .page-header {
-            text-align: center;
-            margin-bottom: 30px;
-            background: #333;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            border: 1px solid #444;
-        }
-        
-        .page-header h1 {
-            color: #fff;
-            margin: 0 0 10px 0;
-            font-size: 2.5rem;
-        }
-        
-        .page-header h2 {
-            color: #ccc;
-            margin: 0;
-            font-size: 1.1rem;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .stat-card {
-            background: #333;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            text-align: center;
-            border: 1px solid #444;
-        }
-        
-        .stat-number {
-            font-size: 2rem;
-            font-weight: bold;
-            color: whitesmoke;
-            margin-bottom: 5px;
-        }
-        
-        .stat-label {
-            color: #ccc;
-            font-size: 0.9rem;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #ccc;
-            background: #333;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            border: 1px solid #444;
-        }
-        
-        .error {
-            background: #444;
-            color: #ff6b6b;
-            padding: 16px;
-            border-radius: 4px;
-            border: 1px solid #ff6b6b;
-            text-align: center;
-            margin: 20px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        }
-        
-        /* Chessboard Background */
-        .chessboard {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            display: grid;
-            z-index: -1;
-            grid-template: repeat(auto-fill, 250px) / repeat(auto-fill, 250px);
-        }
-        
-        .square {
-            width: 250px;
-            height: 250px;
-            background: transparent;
-            filter: blur(10px);
-            opacity: 0;
-            transition: opacity 1s ease-out;
-            transform: scale(1.01) translateZ(0);
-        }
-        
-        .square.white {
-            background: #ffffff;
-        }
-        
-        .square.visible {
-            opacity: 0.3;
-        }
-        
-        /* Responsive Design */
-        @media (max-width: 1200px) {
-            .main-content {
-                padding: 15px;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .main-content {
-                padding: 15px;
-            }
-            
-            .header {
-                flex-direction: column;
-                gap: 10px;
-                text-align: center;
-            }
-            
-            .nav-buttons {
-                flex-wrap: wrap;
-                justify-content: center;
-            }
-            
-            .page-header h1 {
-                font-size: 2rem;
-            }
-            
-            .stats-grid {
-                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            }
-        }
-    </style>
+    
 </head>
 <body>
 
@@ -255,18 +15,9 @@
         <div class="header">
             <h1 id="page-title">Public Analysis Database</h1>
             <div class="nav-buttons">
-                <a href='/dashboard' id="dashboard-link" class="nav-btn" style="display: none;">Dashboard</a>
-                
-                <a href='/dashboard'>
-                    <button  class="logout-btn" style="background-color: #3498db;">Dashboard</button>
-                </a>         
-                
-                <a href='/public_table'>
-                    <button  class="logout-btn" style="background-color: #3498db;">Public Table</button>
-                </a>
-                
-                <button onclick="logout()" class="logout-btn">Logout</button>
-            
+                <a href='/dashboard' id="dashboard-link" class="btn btn--primary" style="display: none;">Dashboard</a>
+                <a href='/public_table' class="btn btn--primary">Public Table</a>
+                <button id="auth-button" class="btn btn--neutral"></button>
             </div>
         </div>
         
@@ -382,76 +133,18 @@
         }
         
         // API Configuration
-        const API_BASE_URL = window.location.origin.replace(':3000', ':8000');
+        const API_BASE_URL = window.API_BASE_URL;
         
         // Global variables
         let analysisTable = null;
-        let isAuthenticated = false;
         
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
-            checkAuthentication();
+            checkLogin();
             initializeAnalysisTable();
         });
         
-        async function checkAuthentication() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (response.status === 401) {
-                    // Not authenticated
-                    isAuthenticated = false;
-                    updateNavForGuest();
-                } else {
-                    const data = await response.json();
-                    if (data.authenticated) {
-                        isAuthenticated = true;
-                        updateNavForUser();
-                    } else {
-                        isAuthenticated = false;
-                        updateNavForGuest();
-                    }
-                }
-                
-            } catch (error) {
-                console.error('Authentication check failed:', error);
-                isAuthenticated = false;
-                updateNavForGuest();
-            }
-        }
-        
-        function updateNavForGuest() {
-            document.getElementById('dashboard-link').style.display = 'none';
-            document.getElementById('login-link').style.display = 'inline-block';
-            document.getElementById('logout-link').style.display = 'none';
-            document.getElementById('login-link').href = `${API_BASE_URL}/auth/login`;
-        }
-        
-        function updateNavForUser() {
-            document.getElementById('dashboard-link').style.display = 'inline-block';
-            document.getElementById('login-link').style.display = 'none';
-            document.getElementById('logout-link').style.display = 'inline-block';
-        }
-        
-        async function logout() {
-            try {
-                await fetch(`${API_BASE_URL}/api/logout`, {
-                    method: 'POST',
-                    credentials: 'include'
-                });
-            } catch (error) {
-                console.log('Logout request failed, but redirecting anyway');
-            }
-            
-            // Redirect to login page
-            window.location.href = '/';
-        }
+        // logout() provided globally in script.js
         
         function initializeAnalysisTable() {
             // Hide loading
@@ -528,6 +221,61 @@
             }
             return null;
         };
+
+        async function checkLogin() {
+            const authButton = document.getElementById('auth-button');
+            const dashboardLink = document.getElementById('dashboard-link');
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                let isAuthenticated = false;
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.authenticated) {
+                        isAuthenticated = true;
+                    }
+                }
+
+                if (isAuthenticated) {
+                    // User is logged in
+                    if (dashboardLink) dashboardLink.style.display = 'inline-block';
+                    if (authButton) {
+                        authButton.textContent = 'Logout';
+                        authButton.className = 'btn btn--danger';
+                        authButton.onclick = logout;
+                    }
+                } else {
+                    // User is not logged in
+                    if (dashboardLink) dashboardLink.style.display = 'none';
+                    if (authButton) {
+                        authButton.textContent = 'Login';
+                        authButton.className = 'btn btn--success';
+                        authButton.onclick = () => {
+                            window.location.href = `${API_BASE_URL}/auth/login`;
+                        };
+                    }
+                }
+            }
+            catch (error) {
+                // If there's an error, assume not logged in
+                console.error('Auth check failed:', error);
+                if (dashboardLink) dashboardLink.style.display = 'none';
+                if (authButton) {
+                    authButton.textContent = 'Login';
+                    authButton.className = 'btn btn--success';
+                    authButton.onclick = () => {
+                        window.location.href = `${API_BASE_URL}/auth/login`;
+                    };
+                }
+            }
+        }
     </script>
 </body>
 </html>
