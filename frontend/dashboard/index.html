@@ -15,6 +15,7 @@
         <div class="header">
         <h1 id="dashboard-title">Your Lichess Dashboard</h1>
             <div class="nav-buttons">
+                <a href='/' class="btn btn--neutral">Home</a>
                 <a href='/dashboard' class="btn btn--primary">Dashboard</a>
                 <a href='/public_table' class="btn btn--primary">Public Table</a>
                 <button onclick="logout()" class="btn btn--danger">Logout</button>
@@ -38,6 +39,17 @@
         
         <!-- Dashboard Content -->
         <div class="dashboard-content-wrapper">
+            <div id="onboarding" class="onboarding-banner" style="display: none;">
+                <div>
+                    <h3>Getting started</h3>
+                    <ul>
+                        <li>Toggle Listening to let Lichess Scout watch your games.</li>
+                        <li>Play on Lichess as usual; we detect opponents automatically.</li>
+                        <li>Review opponent analysis below and in the Public Table.</li>
+                    </ul>
+                </div>
+                <button id="dismiss-onboarding" class="btn btn--info onboarding-dismiss">Got it</button>
+            </div>
             <div id="dashboard" class="dashboard-grid" style="display: flex; flex-direction: column;">
                 <!-- User Analysis Section -->
                 <div class="analysis-section">
@@ -129,6 +141,21 @@
             checkListeningStatus(); // Check if already listening
             loadUserAnalysis(); // Load user analysis automatically
             initializeAnalysisHistoryComponent(); // Initialize analysis history component
+
+            // Onboarding banner (first time)
+            const onboardingKey = 'ls_onboarding_dismissed';
+            if (!localStorage.getItem(onboardingKey)) {
+                const ob = document.getElementById('onboarding');
+                if (ob) ob.style.display = 'flex';
+            }
+            const dismissBtn = document.getElementById('dismiss-onboarding');
+            if (dismissBtn) {
+                dismissBtn.addEventListener('click', function() {
+                    localStorage.setItem(onboardingKey, '1');
+                    const ob = document.getElementById('onboarding');
+                    if (ob) ob.style.display = 'none';
+                });
+            }
         });
 
         document.getElementById('switch-toggle').addEventListener('change', async function() {

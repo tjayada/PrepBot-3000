@@ -15,18 +15,52 @@
   <div class="main-content" style="text-align: center;">
       <h1>Lichess Scout</h1>
       <h3>Prep Like A GM In 30 Seconds Or Less</h3>
-      <a id="login-button" href="#" class="btn btn--success" style="margin-top: 20px;">Login with Lichess</a>
+      
+      <div id="primary-cta" style="margin-top: 30px; display: none;">
+        <a id="login-button" href="#" class="btn btn--success" style="margin-top: 20px;">Login with Lichess</a>
+      </div>
+      
       <div style="margin-top: 30px;">
         <a href="/public_table" class="btn btn--primary">View Public Analysis Database</a>
       </div>
+
+      <section class="how-it-works" id="how-it-works">
+        <h2 class="how-title">How it works</h2>
+        <p class="how-subtitle">Three quick steps to get automatic opponent prep while you play</p>
+        <div class="how-grid">
+          <div class="how-step">
+            <div class="how-step-header">
+              <div class="how-step-icon">1</div>
+              <h4 class="how-step-title">Toggle Listening</h4>
+            </div>
+            <p class="how-step-text">On your Dashboard, switch on Listening before your session. The app will watch your Lichess games in real time.</p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-header">
+              <div class="how-step-icon">2</div>
+              <h4 class="how-step-title">Play on Lichess</h4>
+            </div>
+            <p class="how-step-text">Just play as usual. When a game starts, we detect your opponent and prepare targeted insights.</p>
+          </div>
+          <div class="how-step">
+            <div class="how-step-header">
+              <div class="how-step-icon">3</div>
+              <h4 class="how-step-title">Review the Prep</h4>
+            </div>
+            <p class="how-step-text">View opponent analysis in your Dashboard and the Public Table. Use it to guide your opening choices.</p>
+          </div>
+        </div>
+      </section>
   </div>
   
   <script>
     // API Configuration - will be set by the server or environment
-    const API_BASE_URL = window.API_BASE_URL; 
+    const API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000'); 
     
-    // Set the login button href dynamically
-    document.getElementById('login-button').href = `${API_BASE_URL}/auth/login`;
+    // Set the login button href dynamically (or swap CTA if logged in)
+    const loginBtn = document.getElementById('login-button');
+    const ctaContainer = document.getElementById('primary-cta');
+    if (loginBtn) loginBtn.href = `${API_BASE_URL}/auth/login`;
 
     // Check if the user is logged in and show dashboard instead of login page if user is logged in
     async function checkLogin() {
@@ -40,14 +74,22 @@
         });
         const data = await response.json();
         if (data.authenticated) {
-          // User is logged in
-          window.location.href = '/dashboard';
+          // User is logged in: swap primary CTA to Dashboard
+          if (loginBtn) {
+            loginBtn.textContent = 'Go to Dashboard';
+            loginBtn.className = 'btn btn--success';
+            loginBtn.href = '/dashboard';
+          }
         }
       }
       catch (error) {
         // If there's an error, assume not logged in and do nothing.
         // The user stays on the login page.
         console.error('Auth check failed:', error);
+      }
+      finally {
+        // Reveal the CTA after we decide which button to show
+        if (ctaContainer) ctaContainer.style.display = 'block';
       }
       }
 

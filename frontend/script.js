@@ -14,6 +14,22 @@ window.logout = async function() {
 };
 
 const chessboard = document.getElementById('chessboard');
+
+// Scroll-aware header background
+function updateHeaderScrolledState() {
+    const headers = document.querySelectorAll('.header');
+    const scrolled = window.scrollY > 8;
+    headers.forEach(h => {
+        if (scrolled) {
+            h.classList.add('scrolled');
+        } else {
+            h.classList.remove('scrolled');
+        }
+    });
+}
+
+window.addEventListener('scroll', updateHeaderScrolledState, { passive: true });
+document.addEventListener('DOMContentLoaded', updateHeaderScrolledState);
 let lastInteraction = Date.now();
 const inactivityTime = 5000; // 3 seconds inactivity
 let animationFrameId = null;
