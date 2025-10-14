@@ -335,6 +335,8 @@ async def generate_prep(opponent_id: str, opponent_color: str, user_access_token
         # Step 2: Generate insights 
         insights = generate_insights(df, min_info_gain=0.0, top_k=5)
 
+        print(f"DEBUG : Generated insights for {opponent_id}: {insights}")
+
         if not insights:
             raise ValueError("No insights generated")
 
