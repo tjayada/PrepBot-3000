@@ -31,7 +31,7 @@ function updateHeaderScrolledState() {
 window.addEventListener('scroll', updateHeaderScrolledState, { passive: true });
 document.addEventListener('DOMContentLoaded', updateHeaderScrolledState);
 let lastInteraction = Date.now();
-const inactivityTime = 5000; // 3 seconds inactivity
+const inactivityTime = 5000; // 5 seconds inactivity
 let animationFrameId = null;
 
 // Create chessboard squares
@@ -54,11 +54,6 @@ function createChessboard() {
             
             const randomDuration = Math.floor(Math.random() * 10) + 2;
             square.dataset.longTransition = `opacity ${randomDuration}s ease-in`;
-            
-            // Old solution, might delete later if no bugs come up again with current solution above
-            //const fixedDuration = 2; // Consistent fade-in duration to prevent rendering artifacts
-            //const randomDelay = Math.random() * 1.5; // Stagger the start time of the animation
-            //square.dataset.longTransition = `opacity ${fixedDuration}s ease-in ${randomDelay}s`;
             
             // White squares on alternating positions
             if ((x + y) % 2 === 0) {
@@ -105,4 +100,77 @@ window.addEventListener('resize', () => {
 
 // Initialize
 createChessboard();
-checkInactivity();
+checkInactivity(); 
+
+// Set the login button href dynamically (or swap CTA if logged in)
+function initializeLoginButton() {
+    const loginBtn = document.getElementById('login-button');
+    const ctaContainer = document.getElementById('primary-cta');
+    if (loginBtn) loginBtn.href = `${window.API_BASE_URL}/auth/login`;
+
+    // Check if the user is logged in and show dashboard instead of login page if user is logged in
+    async function checkLogin() {
+      try {
+        const response = await fetch(`${window.API_BASE_URL}/api/auth/status`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+                        'Content-Type': 'application/json'
+                    }
+        });
+        const data = await response.json();
+        if (data.authenticated) {
+          // User is logged in: swap primary CTA to Dashboard
+          if (loginBtn) {
+            loginBtn.textContent = 'Go to Dashboard';
+            loginBtn.className = 'btn btn--success';
+            loginBtn.href = '/dashboard';
+          }
+        }
+      }
+      catch (error) {
+        // If there's an error, assume not logged in and do nothing.
+        // The user stays on the login page.
+        console.error('Auth check failed:', error);
+      }
+      finally {
+        // Reveal the CTA after we decide which button to show
+        if (ctaContainer) ctaContainer.style.display = 'block';
+      }
+      }
+
+      checkLogin();
+}
+
+// Robo image toggle functionality
+function initializeRoboImage() {
+    const roboImage = document.getElementById('robo-image');
+    const toggleBtn = document.getElementById('robo-toggle-btn');
+    
+    // Randomly choose initial image (1 or 2)
+    const initialImageNumber = Math.random() < 0.5 ? 1 : 2;
+    let isRobo1 = initialImageNumber === 1;
+    
+    // Set initial random image
+    if (roboImage) {
+      roboImage.src = `/assets/images/robo-${initialImageNumber}.png`;
+    }
+    
+    if (toggleBtn && roboImage) {
+      toggleBtn.addEventListener('click', function() {
+        if (isRobo1) {
+          roboImage.src = '/assets/images/robo-2.png';
+          isRobo1 = false;
+        } else {
+          roboImage.src = '/assets/images/robo-1.png';
+          isRobo1 = true;
+        }
+      });
+    }
+}
+
+// Initialize all functionality when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    initializeLoginButton();
+    initializeRoboImage();
+});

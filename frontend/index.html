@@ -5,22 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lichess Scout</title>
   <link rel="stylesheet" href="/css/styles.css">
-  <!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">-->
-  <!--<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">-->
 </head>
 
 <body>
 
   <!--Display the main content in the center of the page-->
-  <div class="main-content" style="text-align: center;">
-      <h1>Lichess Scout</h1>
-      <h3>Prep Like A GM In 30 Seconds Or Less</h3>
+
+  <div class="robo-bubble-container">
+    <img class="robo-bubble-image" id="robo-image" src="/assets/images/robo-1.png" alt="Robot head with speech bubble saying 'ANALYSIS COMPLETE. WIN RATE BOOST: +3000 ELO'">
+    <div class="overlay-div" id="robo-toggle-btn"></div>
+  </div>
+
+    
+    <div class="main-content">
       
-      <div id="primary-cta" style="margin-top: 30px; display: none;">
-        <a id="login-button" href="#" class="btn btn--success" style="margin-top: 20px;">Login with Lichess</a>
+      <div class="title-container">
+        <h1>PrepBot-3000</h1>
       </div>
       
-      <div style="margin-top: 30px;">
+      <h4>Prep For Your Next Game In 30 Seconds <small class="centiseconds-text">(3000 Centiseconds)</small> Or Less</h4>
+      
+      <div id="primary-cta" class="primary-cta">
+        <a id="login-button" href="#" class="btn btn--success">Login with Lichess</a>
+      </div>
+      
+      <div class="public-table-btn">
         <a href="/public_table" class="btn btn--primary">View Public Analysis Database</a>
       </div>
 
@@ -50,53 +59,9 @@
             <p class="how-step-text">View opponent analysis in your Dashboard and the Public Table. Use it to guide your opening choices.</p>
           </div>
         </div>
-      </section>
+      </section> 
   </div>
   
-  <script>
-    // API Configuration - will be set by the server or environment
-    const API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000'); 
-    
-    // Set the login button href dynamically (or swap CTA if logged in)
-    const loginBtn = document.getElementById('login-button');
-    const ctaContainer = document.getElementById('primary-cta');
-    if (loginBtn) loginBtn.href = `${API_BASE_URL}/auth/login`;
-
-    // Check if the user is logged in and show dashboard instead of login page if user is logged in
-    async function checkLogin() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-                        'Content-Type': 'application/json'
-                    }
-        });
-        const data = await response.json();
-        if (data.authenticated) {
-          // User is logged in: swap primary CTA to Dashboard
-          if (loginBtn) {
-            loginBtn.textContent = 'Go to Dashboard';
-            loginBtn.className = 'btn btn--success';
-            loginBtn.href = '/dashboard';
-          }
-        }
-      }
-      catch (error) {
-        // If there's an error, assume not logged in and do nothing.
-        // The user stays on the login page.
-        console.error('Auth check failed:', error);
-      }
-      finally {
-        // Reveal the CTA after we decide which button to show
-        if (ctaContainer) ctaContainer.style.display = 'block';
-      }
-      }
-
-      checkLogin();
-          
-
-  </script>  
   
   <!--Display the chess background on inactivity-->
   <div class="chessboard" id="chessboard"></div>

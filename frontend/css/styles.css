@@ -6,6 +6,7 @@ body {
   text-align: center;
   padding: 20px;
 }
+
 ul {
   list-style: none;
   padding: 0;
@@ -14,16 +15,6 @@ li {
   margin: 10px 0;
 }
 
-.main-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1;
-    text-align: center;
-    width: 90%;
-    max-width: 800px;
-}
 
 .chessboard {
             position: fixed;
@@ -208,7 +199,6 @@ input:checked + .slider:before {
   max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -253,7 +243,6 @@ input:checked + .slider:before {
 }
 
 /* Cards/Sections */
-.card,
 .analysis-section,
 .opponent-section {
   background: #333;
@@ -449,7 +438,7 @@ input:checked + .slider:before {
 
 .how-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 15px;
 }
 
@@ -459,6 +448,13 @@ input:checked + .slider:before {
   border-radius: 8px;
   padding: 16px;
   text-align: left;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.how-step:hover {
+  transform: translateY(-5px) scale(1.02);
+  box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);
+  border-color: #3498db;
 }
 
 .how-step-header {
@@ -560,4 +556,101 @@ input:checked + .slider:before {
     grid-template-columns: 1fr;
     gap: 10px;
   }
+
+  .how-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Animation keyframes moved from HTML */
+@keyframes splash-pulse-img {
+    0% { transform: rotate(5deg) scale(1); }
+    50% { transform: rotate(5deg) scale(1.15); }
+    100% { transform: rotate(5deg) scale(1); }
+}
+
+
+.title-container {
+  position: relative;
+  display: inline-block;
+}
+
+.title-container h1 {
+  font-size: 4.5em;
+  font-weight: 900;
+  color: #f5f5f5;
+  text-shadow: 0 0 8px rgba(52, 152, 219, 0.6), 0 0 16px rgba(52, 152, 219, 0.4);
+  letter-spacing: 1px;
+  margin-bottom: 0;
+  padding-bottom: 10px;
+}
+
+
+.main-content {
+  text-align: center;
+}
+
+.title-container h1 {
+  padding-top: 10%;
+}
+
+.centiseconds-text {
+  font-size: 0.8em;
+  color: #FFD700;
+}
+
+.primary-cta {
+  margin-top: 30px;
+  display: none;
+}
+
+.public-table-btn {
+  margin-top: 30px;
+}
+
+.how-title {
+  margin-top: 30px;
+}
+
+.robo-bubble-container {
+    position: absolute;
+    top: 5%;
+    left: 60%;
+    z-index: 1002;
+    width: 50%;
+    max-width: 400px;
+    height: auto;
+}
+
+.robo-bubble-image {
+    width: 100%;
+    height: auto;
+    animation: splash-pulse-img 2.5s ease-in-out infinite;
+    display: block;
+}
+
+
+.overlay-div {
+    position: absolute;
+    top: 50%;
+    left: 70%;
+    transform: translate(-50%, -50%);
+    z-index: 1003;
+    cursor: pointer;
+    width: 40%;
+    height: 40%;
+    /*border: 2px solid #2196F3;*/
+    border-radius: 50%;
+    /*background: rgba(33, 150, 243, 0.2);*/
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    pointer-events: auto;
+}
+
+
+.robo-bubble-container:hover .robo-bubble-image {
+    animation-play-state: paused;
 }
