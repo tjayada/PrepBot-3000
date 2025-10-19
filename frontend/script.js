@@ -133,13 +133,11 @@ function initializeLoginButton() {
         // The user stays on the login page.
         console.error('Auth check failed:', error);
       }
-      finally {
-        // Reveal the CTA after we decide which button to show
-        if (ctaContainer) ctaContainer.style.display = 'block';
-      }
+      // Note: CTA is now visible by default, no need to show it here
       }
 
-      checkLogin();
+      // Run checkLogin asynchronously without blocking page load
+      setTimeout(checkLogin, 100);
 }
 
 // Robo image toggle functionality

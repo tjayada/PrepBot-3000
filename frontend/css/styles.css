@@ -602,7 +602,7 @@ input:checked + .slider:before {
 
 .primary-cta {
   margin-top: 30px;
-  display: none;
+  display: block;
 }
 
 .public-table-btn {

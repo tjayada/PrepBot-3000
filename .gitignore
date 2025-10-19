@@ -210,4 +210,6 @@ __marimo__/
 .idea
 todo
 *.csv
+*json
+.github
 test*
