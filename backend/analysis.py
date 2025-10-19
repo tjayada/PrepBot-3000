@@ -259,7 +259,7 @@ def compute_information_gains(df):
 
     numeric_features = [
         'moves_pct_faster_than_avg',
-        'longest_slow_streak',
+        #'longest_slow_streak',
         'num_critical_overthinks',
         'game_length'
     ]
