@@ -194,7 +194,7 @@ input:checked + .slider:before {
   left: auto;
   transform: none;
   z-index: 1;
-  text-align: left;
+  text-align: center; /* Changed to center for homepage */
   width: 90%;
   max-width: 1000px;
   margin: 0 auto;
@@ -587,13 +587,7 @@ input:checked + .slider:before {
 }
 
 
-.main-content {
-  text-align: center;
-}
-
-.title-container h1 {
-  padding-top: 10%;
-}
+/* Removed duplicate .main-content definition - consolidated above */
 
 .centiseconds-text {
   font-size: 0.8em;
@@ -653,4 +647,14 @@ input:checked + .slider:before {
 
 .robo-bubble-container:hover .robo-bubble-image {
     animation-play-state: paused;
+}
+
+/* Hidden elements - moved from inline styles */
+.hidden {
+    display: none !important;
+}
+
+.flex-column {
+    display: flex;
+    flex-direction: column;
 }

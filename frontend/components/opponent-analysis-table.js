@@ -49,21 +49,21 @@ class OpponentAnalysisTable {
                     <h2 class="opponent-analysis-title">${this.options.title}</h2>
                 </div>
                 
-                <div id="${this.containerId}-loading" class="opponent-analysis-loading" style="display: none;">
+                <div id="${this.containerId}-loading" class="opponent-analysis-loading hidden">
                     Loading analysis history...
                 </div>
                 
-                <div id="${this.containerId}-error" class="opponent-analysis-error" style="display: none;">
+                <div id="${this.containerId}-error" class="opponent-analysis-error hidden">
                     <p id="${this.containerId}-error-message"></p>
                 </div>
                 
-                <div id="${this.containerId}-empty" class="opponent-analysis-empty" style="display: none;">
+                <div id="${this.containerId}-empty" class="opponent-analysis-empty hidden">
                     <p>No opponent analysis history found.</p>
                     <p>Start listening for games to analyze your opponents!</p>
                 </div>
                 
                 <div class="table-wrapper">
-                    <table id="${this.containerId}-table" class="opponent-analysis-table" style="display: none;">
+                    <table id="${this.containerId}-table" class="opponent-analysis-table hidden">
                         <thead>
                             <tr>
                                 <th>Date</th>
@@ -79,7 +79,7 @@ class OpponentAnalysisTable {
                 </div>
                 
                 ${this.options.showControls ? `
-                <div id="${this.containerId}-pagination" class="pagination-controls" style="display: none;">
+                <div id="${this.containerId}-pagination" class="pagination-controls hidden">
                     <div class="pagination-info">
                         <span id="${this.containerId}-pagination-info">Showing 1-10 of 50 entries</span>
                     </div>
@@ -190,10 +190,10 @@ class OpponentAnalysisTable {
         
         if (!historyData || historyData.length === 0) {
             // Show empty state
-            document.getElementById(`${this.containerId}-empty`).style.display = 'block';
-            document.getElementById(`${this.containerId}-table`).style.display = 'none';
+            document.getElementById(`${this.containerId}-empty`).classList.remove('hidden');
+            document.getElementById(`${this.containerId}-table`).classList.add('hidden');
             if (this.options.showControls) {
-                document.getElementById(`${this.containerId}-pagination`).style.display = 'none';
+                document.getElementById(`${this.containerId}-pagination`).classList.add('hidden');
             }
             return;
         }
@@ -203,11 +203,11 @@ class OpponentAnalysisTable {
         this.totalItems = historyData.length;
         
         // Hide empty state and show table
-        document.getElementById(`${this.containerId}-empty`).style.display = 'none';
-        document.getElementById(`${this.containerId}-table`).style.display = 'table';
+        document.getElementById(`${this.containerId}-empty`).classList.add('hidden');
+        document.getElementById(`${this.containerId}-table`).classList.remove('hidden');
         
         if (this.options.showControls) {
-            document.getElementById(`${this.containerId}-pagination`).style.display = 'flex';
+            document.getElementById(`${this.containerId}-pagination`).classList.remove('hidden');
             this.updatePagination();
         }
         
@@ -327,25 +327,25 @@ class OpponentAnalysisTable {
     }
     
     showLoading() {
-        document.getElementById(`${this.containerId}-loading`).style.display = 'block';
-        document.getElementById(`${this.containerId}-table`).style.display = 'none';
-        document.getElementById(`${this.containerId}-error`).style.display = 'none';
-        document.getElementById(`${this.containerId}-empty`).style.display = 'none';
+        document.getElementById(`${this.containerId}-loading`).classList.remove('hidden');
+        document.getElementById(`${this.containerId}-table`).classList.add('hidden');
+        document.getElementById(`${this.containerId}-error`).classList.add('hidden');
+        document.getElementById(`${this.containerId}-empty`).classList.add('hidden');
         if (this.options.showControls) {
-            document.getElementById(`${this.containerId}-pagination`).style.display = 'none';
+            document.getElementById(`${this.containerId}-pagination`).classList.add('hidden');
         }
     }
     
     hideLoading() {
-        document.getElementById(`${this.containerId}-loading`).style.display = 'none';
+        document.getElementById(`${this.containerId}-loading`).classList.add('hidden');
     }
     
     showError(message) {
         this.hideLoading();
-        document.getElementById(`${this.containerId}-error`).style.display = 'block';
-        document.getElementById(`${this.containerId}-table`).style.display = 'none';
+        document.getElementById(`${this.containerId}-error`).classList.remove('hidden');
+        document.getElementById(`${this.containerId}-table`).classList.add('hidden');
         if (this.options.showControls) {
-            document.getElementById(`${this.containerId}-pagination`).style.display = 'none';
+            document.getElementById(`${this.containerId}-pagination`).classList.add('hidden');
         }
         document.getElementById(`${this.containerId}-error-message`).textContent = message;
         
@@ -356,7 +356,7 @@ class OpponentAnalysisTable {
     }
     
     hideError() {
-        document.getElementById(`${this.containerId}-error`).style.display = 'none';
+        document.getElementById(`${this.containerId}-error`).classList.add('hidden');
     }
     
     // Public methods for external control

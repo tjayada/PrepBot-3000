@@ -34,7 +34,7 @@
         </div>
         
         <!-- Error State -->
-            <div id="error" class="error" style="display: none;">
+            <div id="error" class="error hidden">
             <p id="error-message"></p>
             <button onclick="logout()" class="btn btn--danger">Logout</button>
         </div>
@@ -45,7 +45,7 @@
         
         <!-- Dashboard Content -->
         <div class="dashboard-content-wrapper">
-            <div id="onboarding" class="onboarding-banner" style="display: none;">
+            <div id="onboarding" class="onboarding-banner hidden">
                 <div>
                     <h3>Getting started</h3>
                     <ul>
@@ -56,20 +56,20 @@
                 </div>
                 <button id="dismiss-onboarding" class="btn btn--info onboarding-dismiss">Got it</button>
             </div>
-            <div id="dashboard" class="dashboard-grid" style="display: flex; flex-direction: column;">
+            <div id="dashboard" class="dashboard-grid flex-column">
                 <!-- User Analysis Section -->
                 <div class="analysis-section">
                     <h2 class="analysis-title">Your Game Analysis</h2>
                     
-                    <div id="analysis-loading" class="analysis-loading" style="display: none;">
+                    <div id="analysis-loading" class="analysis-loading hidden">
                         Analyzing your games... This may take a moment.
                     </div>
                     
-                    <div id="analysis-error" class="analysis-error" style="display: none;">
+                    <div id="analysis-error" class="analysis-error hidden">
                         <p id="analysis-error-message"></p>
                     </div>
                     
-                    <div id="analysis-grid" class="analysis-grid" style="display: none;">
+                    <div id="analysis-grid" class="analysis-grid hidden">
                         <div class="analysis-column white">
                             <div class="column-header white">♔ White Pieces</div>
                             <div id="white-analysis" class="analysis-content">
@@ -131,8 +131,7 @@
         // Load dashboard when page loads
         document.addEventListener('DOMContentLoaded', function() {
 
-            console.log('All cookies:', document.cookie);
-            console.log('Session cookie exists:', document.cookie.includes('session='));
+            // Debug: Check session cookie (removed sensitive logging)
 
             // Bind logout event to the logout button in navigation
             const logoutBtn = document.getElementById('logout-link');
@@ -152,14 +151,14 @@
             const onboardingKey = 'ls_onboarding_dismissed';
             if (!localStorage.getItem(onboardingKey)) {
                 const ob = document.getElementById('onboarding');
-                if (ob) ob.style.display = 'flex';
+                if (ob) ob.classList.remove('hidden');
             }
             const dismissBtn = document.getElementById('dismiss-onboarding');
             if (dismissBtn) {
                 dismissBtn.addEventListener('click', function() {
                     localStorage.setItem(onboardingKey, '1');
                     const ob = document.getElementById('onboarding');
-                    if (ob) ob.style.display = 'none';
+                    if (ob) ob.classList.add('hidden');
                 });
             }
         });
@@ -195,7 +194,7 @@
                     // WebSocket connection is already established, no polling needed
                     
                     // Show countdown container
-                    document.getElementById('countdown-container').style.display = 'block';
+                    document.getElementById('countdown-container').classList.remove('hidden');
                     
                 } else {
                     console.error('Failed to start listening:', data.error);
@@ -230,7 +229,7 @@
                     // WebSocket connection remains open for real-time updates
                     
                     // Hide countdown container
-                    document.getElementById('countdown-container').style.display = 'none';
+                    document.getElementById('countdown-container').classList.add('hidden');
                     
                 } else {
                     console.error('Failed to cancel listening:', data.error);
@@ -275,7 +274,7 @@
                 // Auto-toggle off and hide countdown
                 setTimeout(() => {
                     document.getElementById('switch-toggle').checked = false;
-                    document.getElementById('countdown-container').style.display = 'none';
+                    document.getElementById('countdown-container').classList.add('hidden');
                 }, 2000);
                 
                 return;
@@ -315,7 +314,7 @@
                 if (data.success && data.listening) {
                     // User is already listening, restore the UI state
                     document.getElementById('switch-toggle').checked = true;
-                    document.getElementById('countdown-container').style.display = 'block';
+                    document.getElementById('countdown-container').classList.remove('hidden');
                     
                     // Calculate remaining time based on server data
                     const expiryTime = new Date(data.expiry_time);
@@ -338,31 +337,13 @@
         }
 
 
-        function showPrep(prepText) {
-            // Simple in-page display (replace with DOM overlay for extension)
-            const overlay = document.createElement('div');
-            overlay.style.position = 'fixed';
-            overlay.style.bottom = '20px';
-            overlay.style.right = '20px';
-            overlay.style.background = '#fff';
-            overlay.style.border = '1px solid #000';
-            overlay.style.padding = '10px';
-            overlay.style.zIndex = '10000';
-            overlay.style.maxWidth = '300px';
-            overlay.style.boxShadow = '0 0 10px rgba(0,0,0,0.5)';
-            overlay.innerHTML = `<p>${prepText}</p><button onclick="this.parentElement.remove()">Close</button>`;
-            document.body.appendChild(overlay);
-            
-            setTimeout(() => overlay.remove(), 30000); // Auto-close after 30s
-        }
 
 
         async function initializeDashboard() {
             try {
                 showLoading();
 
-                console.log('Making request to:', `${API_BASE_URL}/api/auth/status`);
-                console.log('Cookies before request:', document.cookie);
+                // Debug: Making auth status request
                 
                 const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
                     method: 'GET',
@@ -372,8 +353,7 @@
                     }
                 });
 
-                console.log('Response status:', response.status);
-                console.log('Response headers:', response.headers);
+                // Debug: Response received
 
                 if (response.status === 401) {
                     // Not authenticated - redirect to login
@@ -400,9 +380,9 @@
 
         function displayDashboard(userId) {
             // Hide loading, show dashboard
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('dashboard').style.display = 'flex';
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('dashboard').classList.remove('hidden');
 
             // Update UI with user ID
             const dashboardTitle = document.getElementById('dashboard-title');
@@ -410,15 +390,15 @@
         }
 
         function showLoading() {
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('error').style.display = 'none';
-            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
         }
 
         function showError(message) {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('error').style.display = 'block';
-            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+            document.getElementById('dashboard').classList.add('hidden');
             document.getElementById('error-message').textContent = message;
         }
 
@@ -526,7 +506,7 @@
             hideAnalysisError();
             
             // Show analysis grid
-            document.getElementById('analysis-grid').style.display = 'grid';
+            document.getElementById('analysis-grid').classList.remove('hidden');
             
             // Display white analysis
             const whiteAnalysisDiv = document.getElementById('white-analysis');
@@ -549,24 +529,24 @@
 
 
         function showAnalysisLoading() {
-            document.getElementById('analysis-loading').style.display = 'block';
-            document.getElementById('analysis-grid').style.display = 'none';
-            document.getElementById('analysis-error').style.display = 'none';
+            document.getElementById('analysis-loading').classList.remove('hidden');
+            document.getElementById('analysis-grid').classList.add('hidden');
+            document.getElementById('analysis-error').classList.add('hidden');
         }
 
         function hideAnalysisLoading() {
-            document.getElementById('analysis-loading').style.display = 'none';
+            document.getElementById('analysis-loading').classList.add('hidden');
         }
 
         function showAnalysisError(message) {
             hideAnalysisLoading();
-            document.getElementById('analysis-error').style.display = 'block';
-            document.getElementById('analysis-grid').style.display = 'none';
+            document.getElementById('analysis-error').classList.remove('hidden');
+            document.getElementById('analysis-grid').classList.add('hidden');
             document.getElementById('analysis-error-message').textContent = message;
         }
 
         function hideAnalysisError() {
-            document.getElementById('analysis-error').style.display = 'none';
+            document.getElementById('analysis-error').classList.add('hidden');
         }
 
         // Analysis History Component Functions

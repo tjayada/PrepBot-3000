@@ -22,7 +22,7 @@
             <h1 id="page-title">Public Analysis Database</h1>
             <div class="nav-buttons">
                 <a href='/' class="btn btn--neutral">Home</a>
-                <a href='/dashboard' id="dashboard-link" class="btn btn--primary" style="display: none;">Dashboard</a>
+                <a href='/dashboard' id="dashboard-link" class="btn btn--primary hidden">Dashboard</a>
                 <a href='/public_table' class="btn btn--primary">Public Table</a>
                 <button id="auth-button" class="btn btn--neutral"></button>
             </div>
@@ -62,7 +62,7 @@
         </div>
         
         <!-- Error State -->
-        <div id="error" class="error" style="display: none;">
+        <div id="error" class="error hidden">
             <p id="error-message"></p>
         </div>
         
@@ -155,7 +155,7 @@
         
         function initializeAnalysisTable() {
             // Hide loading
-            document.getElementById('loading').style.display = 'none';
+            document.getElementById('loading').classList.add('hidden');
             
             // Initialize the component with public API
             analysisTable = new PublicAnalysisTable('analysis-container', {
@@ -204,13 +204,13 @@
         }
         
         function showError(message) {
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('error').style.display = 'block';
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
             document.getElementById('error-message').textContent = message;
         }
         
         function hideError() {
-            document.getElementById('error').style.display = 'none';
+            document.getElementById('error').classList.add('hidden');
         }
         
         
@@ -252,7 +252,7 @@
 
                 if (isAuthenticated) {
                     // User is logged in
-                    if (dashboardLink) dashboardLink.style.display = 'inline-block';
+                    if (dashboardLink) dashboardLink.classList.remove('hidden');
                     if (authButton) {
                         authButton.textContent = 'Logout';
                         authButton.className = 'btn btn--danger';
@@ -260,7 +260,7 @@
                     }
                 } else {
                     // User is not logged in
-                    if (dashboardLink) dashboardLink.style.display = 'none';
+                    if (dashboardLink) dashboardLink.classList.add('hidden');
                     if (authButton) {
                         authButton.textContent = 'Login';
                         authButton.className = 'btn btn--success';
@@ -273,7 +273,7 @@
             catch (error) {
                 // If there's an error, assume not logged in
                 console.error('Auth check failed:', error);
-                if (dashboardLink) dashboardLink.style.display = 'none';
+                if (dashboardLink) dashboardLink.classList.add('hidden');
                 if (authButton) {
                     authButton.textContent = 'Login';
                     authButton.className = 'btn btn--success';
