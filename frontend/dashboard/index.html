@@ -624,6 +624,24 @@
             }
         }
 
+        // Clean up resources when page is unloaded
+        window.addEventListener('beforeunload', function() {
+            disconnectWebSocket();
+            stopCountdownTimer();
+            if (analysisHistoryTable) {
+                analysisHistoryTable.destroy();
+            }
+        });
+
+        // Also clean up when navigating away
+        window.addEventListener('pagehide', function() {
+            disconnectWebSocket();
+            stopCountdownTimer();
+            if (analysisHistoryTable) {
+                analysisHistoryTable.destroy();
+            }
+        });
+
         function showNewAnalysisNotification(wsData = null) {
             // Create a temporary notification
             const notification = document.createElement('div');
@@ -654,6 +672,6 @@
         }
     </script>
     <script src="/components/opponent-analysis-table.js"></script>
-    <script src="/script.js"></script>
+    <!--<script src="/script.js"></script>-->
 </body>
 </html>
