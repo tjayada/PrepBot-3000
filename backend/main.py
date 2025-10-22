@@ -1197,7 +1197,7 @@ async def get_all_public_analysis():
 @app.on_event("startup")
 async def startup_event():
     """Initialize resources on startup"""
-    logger.info("Starting Lichess Scout API")
+    logger.info("Starting PrepBot-3000 Chess API")
     if ENVIRONMENT == "development":
         logger.info(f"Environment: {ENVIRONMENT}")
         logger.info(f"Port: {PORT}")
@@ -1206,7 +1206,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup resources on shutdown"""
-    logger.info("Shutting down Lichess Scout API")
+    logger.info("Shutting down PrepBot-3000 Chess API")
     await httpx_client.aclose()
 
 
