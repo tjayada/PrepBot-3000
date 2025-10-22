@@ -14,6 +14,7 @@ from postgrest import APIError
 from typing import Optional, Dict
 from urllib.parse import urlencode
 from supabase import create_client, Client
+from cryptography.fernet import Fernet
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from fastapi.responses import RedirectResponse
@@ -81,8 +82,9 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000" if ENVIRONMENT 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
 
-# Validate required environment variables (without exposing values)
+# Validate required environment variables
 required_vars = {
     "SECRET_KEY": SECRET_KEY,
     "LICHESS_CLIENT_ID": CLIENT_ID,
@@ -90,7 +92,7 @@ required_vars = {
     "FRONTEND_URL": FRONTEND_URL,
     "SUPABASE_URL": SUPABASE_URL,
     "SUPABASE_KEY": SUPABASE_KEY,
-    "GROQ_API_KEY": GROQ_API_KEY
+    "GROQ_API_KEY": GROQ_API_KEY,
 }
 
 missing_vars = [var for var, value in required_vars.items() if not value]
@@ -98,15 +100,45 @@ if missing_vars:
     raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
 
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Supabase clients
+supabase_service: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Use service client for backend operations
+supabase: Client = supabase_service
+
+if not ENCRYPTION_KEY:
+    raise ValueError("Missing required environment variable: ENCRYPTION_KEY")
+try:
+    _fernet: Fernet = Fernet(ENCRYPTION_KEY.encode())
+except Exception as e:
+    raise ValueError(f"Invalid ENCRYPTION_KEY provided: {e}")
+
+def encrypt_token(token: str) -> str:
+    if not token:
+        return token
+    return _fernet.encrypt(token.encode()).decode()
+
+def decrypt_token(encrypted_token: str) -> str:
+    if not encrypted_token:
+        return encrypted_token
+    try:
+        return _fernet.decrypt(encrypted_token.encode()).decode()
+    except Exception as e:
+        raise ValueError("Failed to decrypt access token") from e
+
+def get_user_access_token(user_data: dict) -> Optional[str]:
+    #raw = user_data.get("access_token") if user_data else None
+    #return decrypt_token(raw)
+    return user_data.get("access_token")
+
 
 # Add CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],  # Restrict to specific frontend URL
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],  # Limit to necessary methods
-    allow_headers=["Content-Type", "Authorization"],  # Limit headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Add session middleware
@@ -122,6 +154,9 @@ PORT = int(os.getenv("PORT", 8000))
 
 executor = ThreadPoolExecutor(max_workers=10)
 check_stream_events_queue = {}
+
+# Temporary storage for OAuth verifiers (in production, use Redis or database)
+oauth_verifiers = {}
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -181,9 +216,15 @@ def generate_session_token(user_id: str) -> str:
 def verify_session_token(token: str, user_id: str = None) -> Optional[dict]:
     """Verify and decode session token"""
     try:
+        logger.info(f"Verifying token: {token[:20]}...")
+        logger.info(f"Secret key available: {bool(SECRET_KEY)}")
+        
         # Token verification in progress
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        logger.info(f"Decoded payload: {payload}")
+        
         if payload.get("type") != "session":
+            logger.info("Token type is not 'session'")
             return None
 
         if user_id:
@@ -195,15 +236,20 @@ def verify_session_token(token: str, user_id: str = None) -> Optional[dict]:
                     .execute()
                 )
                 if result.data and result.data[0].get("session_token") != token:
+                    logger.info("Token mismatch in database")
                     return None
-            except Exception:
+            except Exception as e:
+                logger.info(f"Token revocation check failed: {e}")
                 # Token revocation check failed - continue without revocation check
                 pass
 
+        logger.info("Token verification successful")
         return payload
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as e:
+        logger.info(f"Token expired: {e}")
         return None
-    except jwt.InvalidTokenError:
+    except jwt.InvalidTokenError as e:
+        logger.info(f"Invalid token: {e}")
         return None
 
 
@@ -211,15 +257,25 @@ def get_current_user(request: Request) -> Optional[dict]:
     """Get current authenticated user from session token"""
     session_token = request.cookies.get("session_token")
 
+    # Debug: Log cookie information
+    logger.info(f"Cookies: {dict(request.cookies)}")
+    logger.info(f"Session token from cookie: {session_token}")
+
     if not session_token:
         session_token = request.session.get("session_token")
+        logger.info(f"Session token from session: {session_token}")
 
     if not session_token:
+        logger.info("No session token found")
         return None
 
+    logger.info(f"Verifying session token: {session_token[:20]}...")
     token_payload = verify_session_token(session_token)
     if not token_payload:
+        logger.info("Session token verification failed")
         return None
+    
+    logger.info(f"Token payload: {token_payload}")
 
     # Get user data from database
     try:
@@ -291,7 +347,7 @@ async def get_lichess_user(access_token: str) -> dict:
 
 def get_lichess_client(user_data: dict) -> berserk.Client:
     """Get authenticated Lichess client using user data from database"""
-    access_token = user_data.get("access_token")
+    access_token = get_user_access_token(user_data)
     if not access_token:
         raise HTTPException(status_code=401, detail="No valid access token")
 
@@ -383,8 +439,8 @@ def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
                 opponent_color = "white" if user_color == "black" else "black"
 
 
-                # Get user's access token for API calls
-                user_access_token = user.get("access_token")
+                # Get user's access token for API calls (decrypt if needed)
+                user_access_token = get_user_access_token(user)
                 
                 # Schedule the async part to run on the main event loop
                 asyncio.run_coroutine_threadsafe(
@@ -479,12 +535,20 @@ async def login(request: Request):
     verifier = create_verifier()
     challenge = create_challenge(verifier)
 
-    request.session["code_verifier"] = verifier
+    # Store verifier in temporary storage with a unique key
+    import uuid
+    state_key = str(uuid.uuid4())
+    oauth_verifiers[state_key] = verifier
+    
+    # Debug: Log storage
+    logger.info(f"Stored verifier with key: {state_key[:10]}...")
+    logger.info(f"Verifier: {verifier[:10]}...")
 
     oauth_params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
         "redirect_uri": f"{base_url}/auth/callback",
+        "state": state_key,  # Include state parameter
         # "scope": "preference:read stream:watch",
         "scope": "preference:read challenge:read",
         "code_challenge_method": "S256",
@@ -496,14 +560,26 @@ async def login(request: Request):
 
 
 @app.get("/auth/callback")
-async def callback(request: Request, code: str = None):
+async def callback(request: Request, code: str = None, state: str = None):
     """Handle OAuth callback from Lichess"""
     if not code:
         raise HTTPException(status_code=400, detail="No authorization code provided")
 
-    verifier = request.session.get("code_verifier")
+    if not state:
+        raise HTTPException(status_code=400, detail="No state parameter provided")
+
+    # Debug: Log state and verifier lookup
+    logger.info(f"Received state: {state}")
+    logger.info(f"Available verifier keys: {list(oauth_verifiers.keys())}")
+    
+    verifier = oauth_verifiers.get(state)
     if not verifier:
+        logger.error(f"No code verifier found for state: {state}")
         raise HTTPException(status_code=400, detail="No code verifier found in session")
+    
+    # Clean up the verifier from temporary storage
+    oauth_verifiers.pop(state, None)
+    logger.info(f"Retrieved and cleaned up verifier for state: {state}")
 
     base_url = BASE_URL
     redirect_uri = f"{base_url}/auth/callback"
@@ -525,9 +601,11 @@ async def callback(request: Request, code: str = None):
 
     # Generate secure session token
     session_token = generate_session_token(user_id)
+    logger.info(f"Generated session token: {session_token[:20]}...")
 
     data = {
         "id": user_id,
+        #"access_token": encrypt_token(access_token),
         "access_token": access_token,
         "token_expires_at": token_expires_at.isoformat(),
         "session_expires_at": session_expires_at.isoformat(),
@@ -537,11 +615,12 @@ async def callback(request: Request, code: str = None):
 
     try:
         supabase.table("users").upsert(data, on_conflict="id").execute()
+        logger.info(f"User data stored in database for user: {user_id}")
     except APIError as e:
+        logger.error(f"Database error: {e.message}")
         raise HTTPException(status_code=500, detail=f"Supabase error: {e.message}")
 
-    # Clean up OAuth session data
-    request.session.pop("code_verifier", None)
+    # OAuth verifier already cleaned up from temporary storage
 
     # Create response with HTTP-only cookie
     response = RedirectResponse(f"{FRONTEND_URL}/dashboard", status_code=303)
@@ -556,6 +635,9 @@ async def callback(request: Request, code: str = None):
         samesite="lax",  # CSRF protection
         domain=None,  # Allow cross-origin cookies
     )
+    
+    logger.info(f"Set session_token cookie: {session_token[:20]}...")
+    logger.info(f"Cookie settings: httponly=True, secure={ENVIRONMENT == 'production'}, samesite=lax")
 
     return response
     # return {"message": f"Logged in as {user_id}, lichess token: {access_token}"}
@@ -636,10 +718,13 @@ async def logout(request: Request, response: Response):
 @app.get("/api/auth/status")
 async def auth_status(request: Request):
     """Check authentication status"""
+    logger.info("Checking auth status...")
     user = get_current_user(request)
     if user:
+        logger.info(f"User authenticated: {user['id']}")
         return {"authenticated": True, "user_id": user["id"]}
     else:
+        logger.info("User not authenticated")
         return {"authenticated": False}
 
 
@@ -768,7 +853,7 @@ async def analyze_user(request: Request, request_data: dict, user: dict = Depend
                     pass  # Error parsing datetime, will generate new analysis
         
         # Get user's access token
-        user_access_token = user.get("access_token")
+        user_access_token = get_user_access_token(user)
         if not user_access_token:
             raise HTTPException(status_code=401, detail="No valid access token")
         
