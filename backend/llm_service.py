@@ -1,6 +1,8 @@
 from typing import Dict, List, Any, Optional
 from groq import Groq
-import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # some extra context for eco types
 eco_categories = {
@@ -281,5 +283,5 @@ def generate_llm_recommendations(
         return response.choices[0].message.content.strip()
         
     except Exception as e:
-        print(f"Error generating LLM recommendations: {e}")
+        logger.error(f"Error generating LLM recommendations: {e}")
         return "Failed to generate recommendations - check your API key and connection."

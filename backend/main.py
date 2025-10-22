@@ -1,29 +1,45 @@
-import asyncio
-from chess import Status
-from fastapi import Cookie, FastAPI, Request, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
-from fastapi.responses import RedirectResponse
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
+import os
+import jwt
+import json
 import httpx
-import hashlib
+import dotenv
 import base64
 import secrets
-import dotenv
-import os
-from urllib.parse import urlencode
-from datetime import datetime, timedelta, timezone
-from postgrest import APIError
-from supabase import create_client, Client
+import hashlib
+import asyncio
 import berserk
-import jwt
-from typing import Optional, Dict
-from concurrent.futures import ThreadPoolExecutor
+import logging
 import pandas as pd
-import json
-
-# Import our analysis modules
+from postgrest import APIError
+from typing import Optional, Dict
+from urllib.parse import urlencode
+from supabase import create_client, Client
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi.responses import RedirectResponse
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from starlette.middleware.sessions import SessionMiddleware
+from fastapi import Cookie, FastAPI, Request, Depends, HTTPException, Response, WebSocket, WebSocketDisconnect
+# own modules
 from analysis import generate_insights, stream_games_for_user, extract_features
 from llm_service import build_context, build_snappy_prompt, generate_llm_recommendations, get_system_prompt
+
+# Constants
+MAX_GAMES_ANALYSIS = 50
+ANALYSIS_CACHE_DAYS = 7
+SESSION_DURATION_DAYS = 30
+MIN_LISTENING_DURATION = 1   # minutes
+MAX_LISTENING_DURATION = 60  # minutes
+WS_1008_POLICY_VIOLATION = 1008
+
+# Configure logging
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+logging.basicConfig(level=getattr(logging, LOG_LEVEL.upper()))
+logger = logging.getLogger(__name__)
+
 
 
 ############### Setup ###############
@@ -49,33 +65,48 @@ Database Schema Requirements:
 """
 
 dotenv.load_dotenv()
-app = FastAPI()
 
+# Rate limiting setup
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Environment configuration
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 SECRET_KEY = os.getenv("SECRET_KEY")
 CLIENT_ID = os.getenv("LICHESS_CLIENT_ID")
-BASE_URL = os.getenv(
-    "BASE_URL", "http://localhost:8000"
-)  # Default for my development for now
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000" if ENVIRONMENT == "development" else None)
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000" if ENVIRONMENT == "development" else None)
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
+# Validate required environment variables (without exposing values)
+required_vars = {
+    "SECRET_KEY": SECRET_KEY,
+    "LICHESS_CLIENT_ID": CLIENT_ID,
+    "BASE_URL": BASE_URL,
+    "FRONTEND_URL": FRONTEND_URL,
+    "SUPABASE_URL": SUPABASE_URL,
+    "SUPABASE_KEY": SUPABASE_KEY,
+    "GROQ_API_KEY": GROQ_API_KEY
+}
+
+missing_vars = [var for var, value in required_vars.items() if not value]
+if missing_vars:
+    raise ValueError(f"Missing required environment variables: {', '.join(missing_vars)}")
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is required")
-if not CLIENT_ID:
-    raise ValueError("LICHESS_CLIENT_ID environment variable is required")
 
 # Add CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],
+    allow_origins=[FRONTEND_URL],  # Restrict to specific frontend URL
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],  # Limit to necessary methods
+    allow_headers=["Content-Type", "Authorization"],  # Limit headers
 )
 
 # Add session middleware
@@ -84,7 +115,7 @@ app.add_middleware(
     secret_key=SECRET_KEY,
     max_age=60 * 60 * 24 * 30,  # 30 days
     same_site="lax",
-    https_only=False,  # Set to False for local development
+    https_only=ENVIRONMENT == "production",  # HTTPS only in production
 )
 
 PORT = int(os.getenv("PORT", 8000))
@@ -99,20 +130,20 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, user_id: str):
         self.active_connections[user_id] = websocket
-        print(f"WebSocket connected for user: {user_id}")
+        logger.info(f"WebSocket connected for user: {user_id}")
 
     def disconnect(self, user_id: str):
         if user_id in self.active_connections:
             del self.active_connections[user_id]
-            print(f"WebSocket disconnected for user: {user_id}")
+            logger.info(f"WebSocket disconnected for user: {user_id}")
 
     async def send_personal_message(self, message: dict, user_id: str):
         if user_id in self.active_connections:
             try:
                 await self.active_connections[user_id].send_text(json.dumps(message))
-                print(f"Sent WebSocket message to user {user_id}: {message}")
+                logger.debug(f"Sent WebSocket message to user {user_id}")
             except Exception as e:
-                print(f"Error sending WebSocket message to {user_id}: {e}")
+                logger.error(f"Error sending WebSocket message to {user_id}: {e}")
                 self.disconnect(user_id)
 
 manager = ConnectionManager()
@@ -150,16 +181,9 @@ def generate_session_token(user_id: str) -> str:
 def verify_session_token(token: str, user_id: str = None) -> Optional[dict]:
     """Verify and decode session token"""
     try:
-        print(
-            f"DEBUG: Verifying token with SECRET_KEY: {SECRET_KEY[:10] if SECRET_KEY else None}..."
-        )
+        # Token verification in progress
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        print(f"DEBUG: Token decoded successfully: {payload}")
-
         if payload.get("type") != "session":
-            print(
-                f"DEBUG: Token type mismatch. Expected 'session', got '{payload.get('type')}'"
-            )
             return None
 
         if user_id:
@@ -171,48 +195,31 @@ def verify_session_token(token: str, user_id: str = None) -> Optional[dict]:
                     .execute()
                 )
                 if result.data and result.data[0].get("session_token") != token:
-                    print("DEBUG: Token revoked - database token differs")
                     return None
-            except Exception as e:
-                print(f"DEBUG: Error checking token revocation: {e}")
+            except Exception:
+                # Token revocation check failed - continue without revocation check
+                pass
 
         return payload
-    except jwt.ExpiredSignatureError as e:
-        print(f"DEBUG: Token expired: {e}")
+    except jwt.ExpiredSignatureError:
         return None
-    except jwt.InvalidTokenError as e:
-        print(f"DEBUG: Invalid token: {e}")
+    except jwt.InvalidTokenError:
         return None
 
 
 def get_current_user(request: Request) -> Optional[dict]:
     """Get current authenticated user from session token"""
-    print("=== DEBUG: get_current_user called ===")
-    print(f"All cookies: {dict(request.cookies)}")
-    print(f"Session data: {dict(request.session)}")
-
     session_token = request.cookies.get("session_token")
-    print(
-        f"Session token from cookie: {session_token[:50] if session_token else None}..."
-    )
 
     if not session_token:
         session_token = request.session.get("session_token")
-        print(
-            f"Session token from session: {session_token[:50] if session_token else None}..."
-        )
 
     if not session_token:
-        print("DEBUG: No session token found")
         return None
 
-    print("DEBUG: Verifying session token...")
     token_payload = verify_session_token(session_token)
     if not token_payload:
-        print("DEBUG: Token verification failed")
         return None
-
-    print(f"DEBUG: Token payload: {token_payload}")
 
     # Get user data from database
     try:
@@ -222,14 +229,11 @@ def get_current_user(request: Request) -> Optional[dict]:
             .eq("id", token_payload["user_id"])
             .execute()
         )
-        print(f"DEBUG: Database query result: {result.data}")
 
         if result.data and len(result.data) > 0:
             user_data = result.data[0]
-            print(f"DEBUG: User data from DB: {user_data}")
 
             if user_data.get("session_token") != session_token:
-                print("DEBUG: Token revoked - database token differs")
                 return None
 
             # Check if session hasn't expired in database
@@ -238,16 +242,12 @@ def get_current_user(request: Request) -> Optional[dict]:
                     user_data["session_expires_at"].replace("Z", "+00:00")
                 )
                 now = datetime.now(timezone.utc)
-                print(f"DEBUG: Session expires at: {expires_at}, Current time: {now}")
                 if expires_at < now:
-                    print("DEBUG: Session expired")
                     return None
-            print("DEBUG: User authenticated successfully")
             return user_data
-        else:
-            print("DEBUG: No user data found in database")
-    except Exception as e:
-        print(f"DEBUG: Error fetching user data: {e}")
+    except Exception:
+        # Error fetching user data - return None for security
+        return None
 
     return None
 
@@ -312,13 +312,13 @@ async def generate_prep(opponent_id: str, opponent_color: str, user_access_token
         String containing actionable preparation advice
     """
     try:
-        print(f"Starting analysis for opponent: {opponent_id} ({opponent_color})")
+        logger.info(f"Starting analysis for opponent: {opponent_id} ({opponent_color})")
         
         if not user_access_token:
             raise ValueError("No user access token provided")
         
-        # Step 1: Fetch and analyze games
-        max_games = 50 
+        # Step 1: Fetch and analyze games (rate limited)
+        max_games = MAX_GAMES_ANALYSIS  # Limit to prevent abuse
         all_feats = []
         
         async for game in stream_games_for_user(opponent_id, user_access_token, opponent_color, max_games=max_games):
@@ -330,12 +330,11 @@ async def generate_prep(opponent_id: str, opponent_color: str, user_access_token
             return f"⚠️ No recent games found for {opponent_id}. Cannot generate preparation analysis."
         
         df = pd.DataFrame(all_feats)
-        print(f"Analyzed {len(df)} games for {opponent_id}")
+        logger.info(f"Analyzed {len(df)} games for {opponent_id}")
         
         # Step 2: Generate insights 
         insights = generate_insights(df, min_info_gain=0.0, top_k=5)
 
-        print(f"DEBUG : Generated insights for {opponent_id}: {insights}")
 
         if not insights:
             raise ValueError("No insights generated")
@@ -355,7 +354,7 @@ async def generate_prep(opponent_id: str, opponent_color: str, user_access_token
         
 
     except Exception as e:
-        print(f"Error generating prep for {opponent_id}: {e}")
+        logger.error(f"Error generating prep for {opponent_id}: {e}")
         return f"❌ Could not analyze {opponent_id}: {str(e)}"
 
 
@@ -372,14 +371,10 @@ def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
                 ):
                     # remove from queue
                     check_stream_events_queue.pop(user_id, None)
-                    print(f"DEBUG: Listening expired for {user_id}")
                     break
 
             if user_id not in check_stream_events_queue:
-                print(f"DEBUG: User not in activity queue for {user_id}")
                 break
-
-            print(f"DEBUG: Received event for user_id {user_id}: {event}")
 
             if event.get("type") == "gameStart":
                 game_id = event["game"]["fullId"]
@@ -398,71 +393,18 @@ def listen_for_games_blocking(user: dict, loop: asyncio.AbstractEventLoop):
                 # You could optionally wait for the result, but it's not necessary here
                 # future.result()
 
-                print("\n DEBUG: Game start event handled successfully \n")
 
-    except Exception as e:
-        print(f"DEBUG: Stream error for {user_id}: {e}")
+    except Exception:
         # cancel activity from queue
         check_stream_events_queue.pop(user_id, None)
         # Raising HTTPException here will crash the thread, not send a response.
         # It's better to just log the error.
 
 
-'''
-async def stream_games_for_user(username: str, token: str, max_games: int = 50):
-    """
-    Asynchronously streams games from the Lichess API using httpx, yielding
-    each game as it arrives. This is a highly memory-efficient and
-    performant method.
-    """
-    url = f"https://lichess.org/api/games/user/{username}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/x-ndjson"  # Important for streaming
-    }
-    params = {
-        "rated": "true",
-        "clocks": "true",
-        "opening": "true",
-        "max": max_games,
-        "perfType": "blitz,rapid,classical"
-    }
-
-    print(f"Streaming last {max_games} games for {username}...")
-    try:
-        async with httpx.AsyncClient() as client:
-            async with client.stream("GET", url, headers=headers, params=params, timeout=30.0) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if line:
-                        yield json.loads(line)
-    except httpx.RequestError as e:
-        print(f"An HTTP error occurred while streaming games: {e}")
-
-
-async def analyze_opponent_games(opponent_id: str, token: str, max_games: int = 50) -> str:
-    """
-    Downloads, analyzes, and generates a brief for an opponent.
-    """
-    analyzer = ChessGameAnalyzer()
-    games_analyzed = 0
-    async for game in stream_games_for_user(opponent_id, token, max_games=max_games):
-        analyzer.add_game(game)
-        games_analyzed += 1
-    
-    if games_analyzed == 0:
-        return "Could not fetch any recent games for this opponent."
-
-    # This part is CPU-bound, but it runs after the I/O is complete.
-    # For very large analysis, you could run this in an executor.
-    brief = analyzer.generate_opponent_brief(opponent_id)
-    return brief
-'''
 
 async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, opponent_color: str, user_access_token: str = None):
     """Asynchronous handler for game start events."""
 
-    print("\n in the handle_game_start_event function")
 
     # Check DB if a recent analysis already exists
     #result = supabase.table("analytics").select("*").eq("target_user", opponent_id).execute()
@@ -484,11 +426,10 @@ async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, 
                 # If created_at is naive, assume it's UTC
                 created_at = created_at.replace(tzinfo=timezone.utc)
             
-            if created_at > now - timedelta(days=7):
-                print(f"\nANALYSIS ALREADY EXISTS IN DB for opponent {opponent_id} and color {opponent_color}")
+            if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
                 return user_data["prep_text"]
-        except (ValueError, TypeError) as e:
-            print(f"Error parsing datetime for existing analysis: {e}, generating new analysis")
+        except (ValueError, TypeError):
+            pass  # Error parsing datetime, will generate new analysis
 
 
     # Fetch games, analyze, and generate the preparation text
@@ -504,11 +445,8 @@ async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, 
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    print(f"About to upsert analysis for opponent {opponent_id}")
-
     try:
         supabase.table("analytics").upsert(data, on_conflict="game_id").execute()
-        print(f"DEBUG: Generated prep for opponent {opponent_id} in game {game_id}")
         
         # Send WebSocket notification to the user about new analysis
         notification = {
@@ -520,21 +458,23 @@ async def handle_game_start_event(game_id: str, user_id: str, opponent_id: str, 
         }
         await manager.send_personal_message(notification, user_id)
         
-    except APIError as e:
-        print(f"DEBUG: Database error: {e}")
+    except APIError:
+        # Database error - analysis not stored
+        pass
 
 
 ############### Define API Endpoints ###############
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment monitoring"""
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @app.get("/auth/login")
 async def login(request: Request):
     """Initiate OAuth login with Lichess"""
-    base_url = (
-        BASE_URL
-        if BASE_URL != "http://localhost:8000"
-        else f"{request.url.scheme}://{request.url.netloc}"
-    )
+    base_url = BASE_URL
 
     verifier = create_verifier()
     challenge = create_challenge(verifier)
@@ -565,11 +505,7 @@ async def callback(request: Request, code: str = None):
     if not verifier:
         raise HTTPException(status_code=400, detail="No code verifier found in session")
 
-    base_url = (
-        BASE_URL
-        if BASE_URL != "http://localhost:8000"
-        else f"{request.url.scheme}://{request.url.netloc}"
-    )
+    base_url = BASE_URL
     redirect_uri = f"{base_url}/auth/callback"
 
     lichess_token = await get_lichess_token(code, verifier, redirect_uri)
@@ -585,11 +521,10 @@ async def callback(request: Request, code: str = None):
 
     now = datetime.now(timezone.utc)
     token_expires_at = now + timedelta(hours=1)
-    session_expires_at = now + timedelta(days=30)  # Long-lived session
+    session_expires_at = now + timedelta(days=SESSION_DURATION_DAYS)  # Long-lived session
 
     # Generate secure session token
     session_token = generate_session_token(user_id)
-    print(f"DEBUG: Generated session token: {session_token[:50]}...")
 
     data = {
         "id": user_id,
@@ -599,35 +534,28 @@ async def callback(request: Request, code: str = None):
         "session_token": session_token,  # Store session token in DB
         "created_at": now.isoformat(),
     }
-    print(f"DEBUG: User data to store: {data}")
 
     try:
-        result = supabase.table("users").upsert(data, on_conflict="id").execute()
-        print(f"DEBUG: Database upsert result: {result.data}")
+        supabase.table("users").upsert(data, on_conflict="id").execute()
     except APIError as e:
-        print(f"DEBUG: Database error: {e}")
         raise HTTPException(status_code=500, detail=f"Supabase error: {e.message}")
 
     # Clean up OAuth session data
     request.session.pop("code_verifier", None)
 
-    print(f"DEBUG: Generated session token for user: {user_id}")  # Debug print
-
     # Create response with HTTP-only cookie
     response = RedirectResponse(f"{FRONTEND_URL}/dashboard", status_code=303)
 
     # Set HTTP-only cookie for session token (more secure than session storage)
-    print(f"DEBUG: Setting cookie with session token: {session_token[:50]}...")
     response.set_cookie(
         key="session_token",
         value=session_token,
-        max_age=60 * 60 * 24 * 30,  # 30 days
+        max_age=60 * 60 * 24 * SESSION_DURATION_DAYS,  # 30 days
         httponly=True,  # Prevent XSS attacks
-        secure=False,  # Set to True in production with HTTPS
+        secure=ENVIRONMENT == "production",  # HTTPS only in production
         samesite="lax",  # CSRF protection
         domain=None,  # Allow cross-origin cookies
     )
-    print("DEBUG: Cookie set successfully, redirecting to dashboard")
 
     return response
     # return {"message": f"Logged in as {user_id}, lichess token: {access_token}"}
@@ -636,9 +564,14 @@ async def callback(request: Request, code: str = None):
 
 
 @app.post("/api/start_listening")
-async def start_listening(request_data: dict, user: dict = Depends(require_auth)):
+@limiter.limit("5/minute")
+async def start_listening(request: Request, request_data: dict, user: dict = Depends(require_auth)):
     user_id = user["id"]
     duration = request_data.get("duration", 20)
+    
+    # Input validation
+    if not isinstance(duration, (int, float)) or duration <= 0 or duration > MAX_LISTENING_DURATION:
+        raise HTTPException(status_code=400, detail=f"Duration must be between {MIN_LISTENING_DURATION} and {MAX_LISTENING_DURATION} minutes")
     loop = asyncio.get_running_loop()
     expiry = datetime.now(timezone.utc) + timedelta(minutes=duration)
 
@@ -676,26 +609,24 @@ async def logout(request: Request, response: Response):
                 }
             ).eq("id", user["id"]).execute()
 
-            print(f"Logged out user: {user['id']}")
 
         # Clear the HTTP-only cookie
         response.delete_cookie(
             key="session_token",
             httponly=True,
-            secure=False,  # Set to True in production with HTTPS
+            secure=ENVIRONMENT == "production",  # HTTPS only in production
             samesite="lax",
             domain=None,
         )
 
         return {"success": True, "message": "Logged out successfully"}
 
-    except Exception as e:
-        print(f"Logout error: {e}")
+    except Exception:
         # Still clear the cookie even if DB update fails
         response.delete_cookie(
             key="session_token",
             httponly=True,
-            secure=False,
+            secure=ENVIRONMENT == "production",  # HTTPS only in production
             samesite="lax",
             domain=None,
         )
@@ -712,14 +643,7 @@ async def auth_status(request: Request):
         return {"authenticated": False}
 
 
-@app.get("/api/debug/cookies")
-async def debug_cookies(request: Request):
-    """Debug endpoint to check cookies and session data"""
-    return {
-        "cookies": dict(request.cookies),
-        "session": dict(request.session),
-        "headers": dict(request.headers),
-    }
+# Debug endpoint removed for production security
 
 
 @app.websocket("/ws")
@@ -729,7 +653,7 @@ async def websocket_endpoint(websocket: WebSocket, session_token: Optional[str] 
     user_data = verify_session_token(session_token)
     if not user_data:
         # Reject the connection if authentication fails
-        await websocket.close(code=Status.WS_1008_POLICY_VIOLATION)
+        await websocket.close(code=WS_1008_POLICY_VIOLATION)
         return
     
     # Accept the WebSocket connection only if authentication succeeded
@@ -746,7 +670,7 @@ async def websocket_endpoint(websocket: WebSocket, session_token: Optional[str] 
     except WebSocketDisconnect:
         manager.disconnect(user_id)
     except Exception as e:
-        print(f"WebSocket error for user {user_id}: {e}")
+        logger.error(f"WebSocket error for user {user_id}: {e}")
         manager.disconnect(user_id)
 
 
@@ -797,12 +721,19 @@ async def get_listening_status(user: dict = Depends(require_auth)):
     }
 
 @app.post("/api/analyze_user")
-async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
+@limiter.limit("10/minute")
+async def analyze_user(request: Request, request_data: dict, user: dict = Depends(require_auth)):
     """Analyze the current user for both white and black pieces"""
     try:
         user_id = user["id"]
         color = request_data.get("color", "white")  # "white" or "black"
         force_refresh = request_data.get("force_refresh", False)
+        
+        # Input validation
+        if color not in ["white", "black"]:
+            raise HTTPException(status_code=400, detail="Color must be 'white' or 'black'")
+        if not isinstance(force_refresh, bool):
+            raise HTTPException(status_code=400, detail="force_refresh must be a boolean")
         
         # Check if analysis already exists in DB and is recent (within 7 days)
         if not force_refresh:
@@ -824,8 +755,7 @@ async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
                         # If created_at is naive, assume it's UTC
                         created_at = created_at.replace(tzinfo=timezone.utc)
                     
-                    if created_at > now - timedelta(days=7):
-                        print(f"Using existing analysis for user {user_id} ({color})")
+                    if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
                         return {
                             "success": True,
                             "user_id": user_id,
@@ -834,8 +764,8 @@ async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
                             "analyzed_at": analysis_data["created_at"],
                             "cached": True
                         }
-                except (ValueError, TypeError) as e:
-                    print(f"Error parsing datetime for existing analysis: {e}, generating new analysis")
+                except (ValueError, TypeError):
+                    pass  # Error parsing datetime, will generate new analysis
         
         # Get user's access token
         user_access_token = user.get("access_token")
@@ -860,9 +790,9 @@ async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
         
         try:
             supabase.table("analytics").upsert(data, on_conflict="game_id").execute()
-            print(f"Stored user analysis for {user_id} ({color})")
-        except APIError as e:
-            print(f"Database error storing user analysis: {e}")
+        except APIError:
+            # Database error - analysis not stored
+            pass
         
         return {
             "success": True,
@@ -874,7 +804,6 @@ async def analyze_user(request_data: dict, user: dict = Depends(require_auth)):
         }
         
     except Exception as e:
-        print(f"Error in analyze_user: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -911,14 +840,13 @@ async def get_user_analysis(user: dict = Depends(require_auth)):
                             # If created_at is naive, assume it's UTC
                             created_at = created_at.replace(tzinfo=timezone.utc)
                         
-                        if created_at > now - timedelta(days=7):
+                        if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
                             analysis_data[color] = {
                                 "preparation": analysis["prep_text"],
                                 "analyzed_at": analysis["created_at"],
                                 "cached": True
                             }
-                    except (ValueError, TypeError) as e:
-                        print(f"Error parsing datetime for analysis {analysis.get('game_id', 'unknown')}: {e}")
+                    except (ValueError, TypeError):
                         continue
         
         return {
@@ -928,7 +856,6 @@ async def get_user_analysis(user: dict = Depends(require_auth)):
         }
         
     except Exception as e:
-        print(f"Error fetching user analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -962,7 +889,6 @@ async def get_user_analysis_history(user: dict = Depends(require_auth)):
         }
         
     except Exception as e:
-        print(f"Error fetching user analysis history: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -994,7 +920,6 @@ async def get_all_public_analysis():
         }
         
     except Exception as e:
-        print(f"Error fetching public analysis data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
