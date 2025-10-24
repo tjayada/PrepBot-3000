@@ -105,6 +105,9 @@
                         <div id="countdown-timer" class="countdown-timer">20:00</div>
                         <div id="countdown-status" class="countdown-status">Waiting for game to start</div>
                     </div>
+
+                    <div id="latestAnalysis" class="latestAnalysis-banner hidden">
+                    </div>
                     
                     <div class="opponent-table-container" id="analysis-history-container"></div>
                 </div>
@@ -643,32 +646,21 @@
         });
 
         function showNewAnalysisNotification(wsData = null) {
-            // Create a temporary notification
-            const notification = document.createElement('div');
-            notification.style.position = 'fixed';
-            notification.style.top = '20px';
-            notification.style.right = '20px';
-            notification.style.background = '#27ae60';
-            notification.style.color = 'white';
-            notification.style.padding = '15px 20px';
-            notification.style.borderRadius = '6px';
-            notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
-            notification.style.zIndex = '10000';
-            notification.style.fontWeight = 'bold';
-            notification.style.fontSize = '14px';
-            
-            // Use WebSocket data if available, otherwise default message
-            const message = wsData ? wsData.message : '🎉 New opponent analysis completed!';
-            notification.innerHTML = message;
-            
-            document.body.appendChild(notification);
-            
-            // Auto-remove after 4 seconds
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
+            // latestAnalysis banner insert message
+            const latestAnalysisBanner = document.getElementById('latestAnalysis');
+            if (latestAnalysisBanner) {
+                latestAnalysisBanner.classList.remove('hidden');
+                if (wsData) {
+                    latestAnalysisBanner.innerHTML = `<div><h3>🤖 Your latest opponent analysis:  </h3> <p> ${wsData.message} </p></div><button id="dismiss-latestAnalysis" class="btn btn--info latestAnalysis-dismiss" onclick="dismissNewAnalysisNotification()">Thanks buddy!</button>`;
                 }
-            }, 4000);
+            }      
+        }
+
+        function dismissNewAnalysisNotification() {
+            const latestAnalysisBanner = document.getElementById('latestAnalysis');
+            if (latestAnalysisBanner) {
+                latestAnalysisBanner.classList.add('hidden');
+            }
         }
     </script>
     <script src="/components/opponent-analysis-table.js"></script>

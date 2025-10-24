@@ -460,6 +460,22 @@ def get_lichess_client(user_data: dict) -> berserk.Client:
     return berserk.Client(session=session)
 
 
+async def revoke_lichess_token(access_token: str):
+    """Revoke access token from Lichess API"""
+    try:
+        response = httpx_client.delete(
+            "https://lichess.org/api/token",
+            headers=({"Authorization": f"Bearer {access_token}"},),
+        )
+        response.raise_for_status()
+        return response.json()
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error revoking Lichess token: {e}")
+        raise HTTPException(
+            status_code=400, detail="Failed to revoke access token from Lichess"
+        )
+
+
 async def generate_prep(
     opponent_id: str, opponent_color: str, user_access_token: str = None
 ) -> str:
@@ -609,13 +625,13 @@ async def handle_game_start_event(
     result = (
         supabase.table("analytics")
         .select("*")
-        .eq("target_user", opponent_id)
+        .eq("target_user", str(opponent_id))
         .eq("color", opponent_color)
         .execute()
     )
 
     if result.data and len(result.data) > 0:
-        user_data = result.data[0]
+        user_data = result.data[-1]
         try:
             # Parse the datetime string and ensure it's timezone-aware
             created_at_str = user_data["created_at"]
@@ -633,6 +649,16 @@ async def handle_game_start_event(
                 created_at = created_at.replace(tzinfo=timezone.utc)
 
             if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
+                # Send WebSocket notification to the user about analysis
+                notification = {
+                    "type": "new_analysis",
+                    "opponent": str(opponent_id),
+                    "color": opponent_color,
+                    "game_id": game_id,
+                    "message": user_data["prep_text"],
+                }
+                await manager.send_personal_message(notification, user_id)
+
                 return user_data["prep_text"]
         except (ValueError, TypeError):
             pass  # Error parsing datetime, will generate new analysis
@@ -659,7 +685,7 @@ async def handle_game_start_event(
             "opponent": opponent_id,
             "color": opponent_color,
             "game_id": game_id,
-            "message": f"New analysis completed for {opponent_id} ({opponent_color})",
+            "message": prep_text,
         }
         await manager.send_personal_message(notification, user_id)
 
@@ -735,7 +761,7 @@ async def callback(request: Request, code: str = None):
 
     data = {
         "id": user_id,
-        "access_token": access_token,
+        "access_token": encrypt_token(access_token),
         "token_expires_at": token_expires_at.isoformat(),
         "session_expires_at": session_expires_at.isoformat(),
         "session_token": session_token,  # Store session token in DB
@@ -823,14 +849,12 @@ async def logout(request: Request, response: Response):
         if user:
             # remove from activity queue
             check_stream_events_queue.pop(user["id"], None)
-            # Invalidate session in database by setting expired time AND clearing token
-            now = datetime.now(timezone.utc)
-            supabase.table("users").update(
-                {
-                    "session_expires_at": now.isoformat(),
-                    "session_token": None,  # Revoke the token
-                }
-            ).eq("id", user["id"]).execute()
+            # Invalidate session in database by deleting them
+            supabase.table("users").delete().eq("id", user["id"]).execute()
+
+            # revoke lichess token
+            if user.get("access_token"):
+                await revoke_lichess_token(user["access_token"])
 
         # Clear the HTTP-only cookie
         response.delete_cookie(
@@ -989,7 +1013,7 @@ async def analyze_user(
                 )
 
                 if result.data and len(result.data) > 0:
-                    analysis_data = result.data[0]
+                    analysis_data = result.data[-1]
                     try:
                         # Parse the datetime string and ensure it's timezone-aware
                         created_at_str = analysis_data["created_at"]
@@ -1072,41 +1096,55 @@ async def get_user_analysis(user: dict = Depends(require_auth)):
         user_id = user["id"]
 
         # Fetch both white and black analysis
-        result = (
-            supabase.table("analytics").select("*").eq("target_user", user_id).execute()
+        result_white = (
+            supabase.table("analytics")
+            .select("*")
+            .eq("target_user", user_id)
+            .eq("color", "white")
+            .execute()
+        )
+        result_black = (
+            supabase.table("analytics")
+            .select("*")
+            .eq("target_user", user_id)
+            .eq("color", "black")
+            .execute()
         )
 
         analysis_data = {"white": None, "black": None}
 
-        if result.data:
-            for analysis in result.data:
-                color = analysis["color"]
-                if color in analysis_data:
-                    # Check if analysis is recent (within 7 days)
-                    try:
-                        # Parse the datetime string and ensure it's timezone-aware
-                        created_at_str = analysis["created_at"]
-                        if created_at_str.endswith("Z"):
-                            created_at = datetime.fromisoformat(
-                                created_at_str.replace("Z", "+00:00")
-                            )
-                        else:
-                            created_at = datetime.fromisoformat(created_at_str)
+        if result_white.data and len(result_white.data) > 0:
+            analysis_data["white"] = result_white.data[-1]
 
-                        # Ensure both datetimes are timezone-aware for comparison
-                        now = datetime.now(timezone.utc)
-                        if created_at.tzinfo is None:
-                            # If created_at is naive, assume it's UTC
-                            created_at = created_at.replace(tzinfo=timezone.utc)
+        if result_black.data and len(result_black.data) > 0:
+            analysis_data["black"] = result_black.data[-1]
 
-                        if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
-                            analysis_data[color] = {
-                                "preparation": analysis["prep_text"],
-                                "analyzed_at": analysis["created_at"],
-                                "cached": True,
-                            }
-                    except (ValueError, TypeError):
-                        continue
+        for analysis in analysis_data.values():
+            color = analysis["color"]
+            try:
+                # Parse the datetime string and ensure it's timezone-aware
+                created_at_str = analysis["created_at"]
+                if created_at_str.endswith("Z"):
+                    created_at = datetime.fromisoformat(
+                        created_at_str.replace("Z", "+00:00")
+                    )
+                else:
+                    created_at = datetime.fromisoformat(created_at_str)
+
+                # Ensure both datetimes are timezone-aware for comparison
+                now = datetime.now(timezone.utc)
+                if created_at.tzinfo is None:
+                    # If created_at is naive, assume it's UTC
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+
+                if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
+                    analysis_data[color] = {
+                        "preparation": analysis["prep_text"],
+                        "analyzed_at": analysis["created_at"],
+                        "cached": True,
+                    }
+            except (ValueError, TypeError):
+                continue
 
         return {"success": True, "user_id": user_id, "analysis": analysis_data}
 

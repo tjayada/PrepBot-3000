@@ -102,42 +102,89 @@ window.addEventListener('resize', () => {
 createChessboard();
 checkInactivity(); 
 
-// Set the login button href dynamically (or swap CTA if logged in)
-function initializeLoginButton() {
-    const loginBtn = document.getElementById('login-button');
-    const ctaContainer = document.getElementById('primary-cta');
-    if (loginBtn) loginBtn.href = `${window.API_BASE_URL}/auth/login`;
+// Initialize login state and display appropriate buttons
+async function initializeLoginButton() {
+  const loginBtn = document.getElementById('login-button');
+  const ctaContainer = document.getElementById('primary-cta');
+  //const tableButtons = document.querySelector('.table-btns');
+  
+  // Set login button href
+  if (loginBtn) {
+    loginBtn.href = `${window.API_BASE_URL}/auth/login`;
+  }
+  
+  try {
+    const response = await fetch(`${window.API_BASE_URL}/api/auth/status`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.authenticated) {
+      // User is logged in - show dashboard/logout/revoke buttons
+      if (ctaContainer) {
+        const dashboardBtn = createButton(
+            'Dashboard', 
+            'btn--success', 
+            () => window.location.href = '/dashboard'
+        );
+        
+        const publicTableBtn = createButton(
+            'Public Database', 
+            'btn--primary', 
+            () => window.location.href = '/public_table'
+        );
 
-    // Check if the user is logged in and show dashboard instead of login page if user is logged in
-    async function checkLogin() {
-      try {
-        const response = await fetch(`${window.API_BASE_URL}/api/auth/status`, {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-                        'Content-Type': 'application/json'
-                    }
-        });
-        const data = await response.json();
-        if (data.authenticated) {
-          // User is logged in: swap primary CTA to Dashboard
-          if (loginBtn) {
-            loginBtn.textContent = 'Go to Dashboard';
-            loginBtn.className = 'btn btn--success';
-            loginBtn.href = '/dashboard';
-          }
-        }
-      }
-      catch (error) {
-        // If there's an error, assume not logged in and do nothing.
-        // The user stays on the login page.
-        console.error('Auth check failed:', error);
-      }
-      // Note: CTA is now visible by default, no need to show it here
+        // Add logout and revoke buttons after the public table button
+        const logoutRevokeBtn = createButton(
+            'Logout & Revoke Access', 
+            'btn--danger', 
+            logout
+        );
+        
+        ctaContainer.appendChild(dashboardBtn);
+        ctaContainer.appendChild(publicTableBtn);
+        ctaContainer.appendChild(logoutRevokeBtn);
       }
 
-      // Run checkLogin asynchronously without blocking page load
-      setTimeout(checkLogin, 100);
+    }
+    else {
+      // User is not logged in - show login button
+      if (ctaContainer) {
+        const loginBtn = createButton(
+            'Login with Lichess', 
+            'btn--success', 
+            () => window.location.href = `${window.API_BASE_URL}/auth/login`
+        );
+        
+        const publicTableBtn = createButton(
+            'Public Database', 
+            'btn--primary', 
+            () => window.location.href = '/public_table'
+        );
+        
+        ctaContainer.appendChild(loginBtn);
+        ctaContainer.appendChild(publicTableBtn);
+      }
+    }
+    
+  } catch (error) {
+    console.error('Auth check failed:', error);
+    // Leave default UI (login button) on error
+  }
+}
+
+// Helper function to create button elements
+function createButton(text, className, onClick) {
+  const btn = document.createElement('a');
+  btn.textContent = text;
+  btn.className = `btn ${className}`;
+  btn.onclick = onClick;
+  return btn;
 }
 
 // Robo image toggle functionality
