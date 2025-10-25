@@ -13,7 +13,7 @@ class OpponentAnalysisTable {
             pageSize: 25,
             showControls: true,
             showManualControls: true, // Show load/refresh buttons by default
-            apiBaseUrl: window.location.origin.replace(':3000', ':8000'),
+            apiBaseUrl: window.API_BASE_URL,
             apiEndpoint: '/api/user/analysis/history',
             onDataLoad: null,
             onError: null,

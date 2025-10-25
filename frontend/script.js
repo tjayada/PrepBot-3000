@@ -1,5 +1,8 @@
 // Shared configuration and helpers
-window.API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000');
+// Set API base URL based on environment
+window.API_BASE_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:8000'  // Development
+  : 'https://prepbot-3000.onrender.com';  // Production - update this after deployment
 
 window.logout = async function() {
     try {
