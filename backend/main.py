@@ -801,7 +801,7 @@ async def callback(request: Request, code: str = None):
         max_age=60 * 60 * 24 * SESSION_DURATION_DAYS,  # 30 days
         httponly=True,  # Prevent XSS attacks
         secure=ENVIRONMENT == "production",  # HTTPS only in production
-        samesite="lax",  # CSRF protection
+        samesite="none",
         domain=None,  # Allow cross-origin cookies
     )
 
