@@ -48,6 +48,7 @@ from llm_service import (
 # Constants
 MAX_GAMES_ANALYSIS = 50
 ANALYSIS_CACHE_DAYS = 7
+ERROR_CACHE_DAYS = 1  # Shorter cache for error cases
 SESSION_DURATION_DAYS = 30
 MIN_LISTENING_DURATION = 1  # minutes
 MAX_LISTENING_DURATION = 60  # minutes
@@ -279,6 +280,18 @@ manager = ConnectionManager()
 ############### Define Functions ###############
 
 
+def is_error_prep_text(prep_text: str) -> bool:
+    """Check if prep_text is an error message (starts with ❌ or ⚠️)"""
+    return prep_text.strip().startswith("❌") or prep_text.strip().startswith("⚠️")
+
+
+def get_cache_duration(prep_text: str) -> int:
+    """Get appropriate cache duration based on prep_text content"""
+    if is_error_prep_text(prep_text):
+        return ERROR_CACHE_DAYS
+    return ANALYSIS_CACHE_DAYS
+
+
 def base64url_encode(data: bytes) -> str:
     """Base64URL encode without padding"""
     return base64.urlsafe_b64encode(data).decode("utf-8").rstrip("=")
@@ -463,7 +476,7 @@ def get_lichess_client(user_data: dict) -> berserk.Client:
 async def revoke_lichess_token(access_token: str):
     """Revoke access token from Lichess API"""
     try:
-        response = httpx_client.delete(
+        response = await httpx_client.delete(
             "https://lichess.org/api/token",
             headers=({"Authorization": f"Bearer {access_token}"},),
         )
@@ -648,7 +661,9 @@ async def handle_game_start_event(
                 # If created_at is naive, assume it's UTC
                 created_at = created_at.replace(tzinfo=timezone.utc)
 
-            if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
+            # Use dynamic cache duration based on prep_text content
+            cache_days = get_cache_duration(user_data["prep_text"])
+            if created_at > now - timedelta(days=cache_days):
                 # Send WebSocket notification to the user about analysis
                 notification = {
                     "type": "new_analysis",
@@ -1030,7 +1045,9 @@ async def analyze_user(
                             # If created_at is naive, assume it's UTC
                             created_at = created_at.replace(tzinfo=timezone.utc)
 
-                        if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
+                        # Use dynamic cache duration based on prep_text content
+                        cache_days = get_cache_duration(analysis_data["prep_text"])
+                        if created_at > (now - timedelta(days=cache_days)):
                             return {
                                 "success": True,
                                 "user_id": user_id,
@@ -1137,9 +1154,11 @@ async def get_user_analysis(user: dict = Depends(require_auth)):
                     # If created_at is naive, assume it's UTC
                     created_at = created_at.replace(tzinfo=timezone.utc)
 
-                if created_at > now - timedelta(days=ANALYSIS_CACHE_DAYS):
+                # Use dynamic cache duration based on prep_text content
+                cache_days = get_cache_duration(analysis["prep_text"])
+                if created_at > (now - timedelta(days=cache_days)):
                     analysis_data[color] = {
-                        "preparation": analysis["prep_text"],
+                        "prep_text": analysis["prep_text"],
                         "analyzed_at": analysis["created_at"],
                         "cached": True,
                     }

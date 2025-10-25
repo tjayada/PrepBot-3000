@@ -47,11 +47,11 @@
         <div class="dashboard-content-wrapper">
             <div id="onboarding" class="onboarding-banner hidden">
                 <div>
-                    <h3>Getting started</h3>
+                    <h3>Getting started :</h3> 
                     <ul>
-                        <li>Toggle Listening to let PrepBot-3000 watch your games.</li>
-                        <li>Play on Lichess as usual; we detect opponents automatically.</li>
-                        <li>Review opponent analysis below and in the Public Table.</li>
+                        <li>1️⃣ : Toggle "Listening-Mode" below to let PrepBot-3000 watch your games.</li>
+                        <li>2️⃣ : Play on Lichess as usual; PrepBot-3000 detects opponents automatically.</li>
+                        <li>3️⃣ : Review your opponent analysis here in your Dashboard or in the Public Table.</li>
                     </ul>
                 </div>
                 <button id="dismiss-onboarding" class="btn btn--info onboarding-dismiss">Got it</button>
@@ -514,7 +514,7 @@
             // Display white analysis
             const whiteAnalysisDiv = document.getElementById('white-analysis');
             if (analysisData.white) {
-                whiteAnalysisDiv.innerHTML = analysisData.white.preparation;
+                whiteAnalysisDiv.innerHTML = analysisData.white.prep_text;
                 whiteAnalysisDiv.style.color = '#000';
             } else {
                 whiteAnalysisDiv.innerHTML = '<div class="analysis-loading">No analysis available for white pieces.</div>';
@@ -523,7 +523,7 @@
             // Display black analysis
             const blackAnalysisDiv = document.getElementById('black-analysis');
             if (analysisData.black) {
-                blackAnalysisDiv.innerHTML = analysisData.black.preparation;
+                blackAnalysisDiv.innerHTML = analysisData.black.prep_text;
                 blackAnalysisDiv.style.color = '#fff';
             } else {
                 blackAnalysisDiv.innerHTML = '<div class="analysis-loading">No analysis available for black pieces.</div>';
