@@ -231,7 +231,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=SECRET_KEY,
     max_age=60 * 60 * 24 * 30,  # 30 days
-    same_site="lax",
+    same_site="none",
     https_only=ENVIRONMENT == "production",  # HTTPS only in production
 )
 
