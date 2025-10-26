@@ -1253,34 +1253,39 @@ async def get_user_analysis(user: dict = Depends(require_auth)):
         if result_black.data and len(result_black.data) > 0:
             analysis_data["black"] = result_black.data[-1]
 
-        for analysis in analysis_data.values():
-            color = analysis["color"]
-            try:
-                # Parse the datetime string and ensure it's timezone-aware
-                created_at_str = analysis["created_at"]
-                if created_at_str.endswith("Z"):
-                    created_at = datetime.fromisoformat(
-                        created_at_str.replace("Z", "+00:00")
-                    )
-                else:
-                    created_at = datetime.fromisoformat(created_at_str)
+        for color in ["white", "black"]:
+            if analysis_data[color] is not None:
+                analysis = analysis_data[color]
+                try:
+                    # Parse the datetime string and ensure it's timezone-aware
+                    created_at_str = analysis["created_at"]
+                    if created_at_str.endswith("Z"):
+                        created_at = datetime.fromisoformat(
+                            created_at_str.replace("Z", "+00:00")
+                        )
+                    else:
+                        created_at = datetime.fromisoformat(created_at_str)
 
-                # Ensure both datetimes are timezone-aware for comparison
-                now = datetime.now(timezone.utc)
-                if created_at.tzinfo is None:
-                    # If created_at is naive, assume it's UTC
-                    created_at = created_at.replace(tzinfo=timezone.utc)
+                    # Ensure both datetimes are timezone-aware for comparison
+                    now = datetime.now(timezone.utc)
+                    if created_at.tzinfo is None:
+                        # If created_at is naive, assume it's UTC
+                        created_at = created_at.replace(tzinfo=timezone.utc)
 
-                # Use dynamic cache duration based on prep_text content
-                cache_days = get_cache_duration(analysis["prep_text"])
-                if created_at > (now - timedelta(days=cache_days)):
-                    analysis_data[color] = {
-                        "prep_text": analysis["prep_text"],
-                        "analyzed_at": analysis["created_at"],
-                        "cached": True,
-                    }
-            except (ValueError, TypeError):
-                continue
+                    # Use dynamic cache duration based on prep_text content
+                    cache_days = get_cache_duration(analysis["prep_text"])
+                    if created_at > (now - timedelta(days=cache_days)):
+                        analysis_data[color] = {
+                            "prep_text": analysis["prep_text"],
+                            "analyzed_at": analysis["created_at"],
+                            "cached": True,
+                        }
+                    else:
+                        # Analysis is expired, set to null
+                        analysis_data[color] = None
+                except (ValueError, TypeError):
+                    # Error parsing datetime, set to null to force regeneration
+                    analysis_data[color] = None
 
         return {"success": True, "user_id": user_id, "analysis": analysis_data}
 

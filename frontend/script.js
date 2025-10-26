@@ -49,7 +49,13 @@ window.loginWithLichess = async function() {
         // Show loading state
         const ctaContainer = document.getElementById('primary-cta');
         if (ctaContainer) {
-            ctaContainer.innerHTML = '<p>Redirecting to Lichess...</p>';
+            ctaContainer.innerHTML = `
+                <div class="loading-screen">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-message">Connecting to Lichess...</div>
+                    <div class="loading-submessage">Preparing OAuth authentication</div>
+                </div>
+            `;
         }
 
         // Get OAuth URL from backend
@@ -174,10 +180,68 @@ window.addEventListener('resize', () => {
 createChessboard();
 checkInactivity(); 
 
+// Loading messages for backend initialization
+const loadingMessages = [
+  { main: "Initializing PrepBot-3000...", sub: "Preparing chess analysis engine" },
+  { main: "Starting backend services...", sub: "Loading AI analysis modules" },
+  { main: "Initializing API endpoints...", sub: "Connecting to Lichess integration" },
+  { main: "Loading opponent database...", sub: "Preparing game analysis tools" },
+  { main: "Calibrating chess algorithms...", sub: "Optimizing opening preparation" },
+  { main: "Finalizing system setup...", sub: "Almost ready to boost your ELO!" }
+];
+
+// Loading screen management
+function showLoadingScreen() {
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.classList.remove('hidden');
+  }
+}
+
+function hideLoadingScreen() {
+  const loadingScreen = document.getElementById('loading-screen');
+  if (loadingScreen) {
+    loadingScreen.classList.add('hidden');
+  }
+}
+
+function updateLoadingMessage(messageIndex) {
+  const messageEl = document.getElementById('loading-message');
+  const submessageEl = document.getElementById('loading-submessage');
+  
+  if (messageEl && submessageEl && loadingMessages[messageIndex]) {
+    // Add updating class for smooth transition
+    messageEl.classList.add('updating');
+    submessageEl.classList.add('updating');
+    
+    setTimeout(() => {
+      messageEl.textContent = loadingMessages[messageIndex].main;
+      submessageEl.textContent = loadingMessages[messageIndex].sub;
+      
+      // Remove updating class
+      messageEl.classList.remove('updating');
+      submessageEl.classList.remove('updating');
+    }, 250);
+  }
+}
+
 // Initialize login state and display appropriate buttons
 async function initializeLoginButton() {
   const ctaContainer = document.getElementById('primary-cta');
-  //const tableButtons = document.querySelector('.table-btns');
+  const loadingScreen = document.getElementById('loading-screen');
+  
+  // Show loading screen initially
+  showLoadingScreen();
+  
+  // Start loading message sequence
+  let messageIndex = 0;
+  const messageInterval = setInterval(() => {
+    updateLoadingMessage(messageIndex);
+    messageIndex++;
+    if (messageIndex >= loadingMessages.length) {
+      messageIndex = 0; // Loop back to start
+    }
+  }, 1500);
   
   try {
     const response = await window.makeAuthenticatedRequest(`${window.API_BASE_URL}/api/auth/status`, {
@@ -185,6 +249,12 @@ async function initializeLoginButton() {
     });
     
     const data = await response.json();
+    
+    // Clear loading messages
+    clearInterval(messageInterval);
+    
+    // Hide loading screen
+    hideLoadingScreen();
     
     if (data.authenticated) {
       // User is logged in - show dashboard/logout/revoke buttons
@@ -236,7 +306,22 @@ async function initializeLoginButton() {
     
   } catch (error) {
     console.error('Auth check failed:', error);
-    // Leave default UI (login button) on error
+    
+    // Clear loading messages on error
+    clearInterval(messageInterval);
+    hideLoadingScreen();
+    
+    // Show error state with retry option
+    if (ctaContainer) {
+      const errorMessage = document.createElement('div');
+      errorMessage.className = 'loading-screen';
+      errorMessage.innerHTML = `
+        <div style="color: #e74c3c; font-size: 18px; margin-bottom: 10px;">⚠️ Connection Failed</div>
+        <div style="color: #cccccc; font-size: 14px; margin-bottom: 20px;">Unable to connect to backend services</div>
+        <button class="btn btn--primary" onclick="location.reload()">Retry</button>
+      `;
+      ctaContainer.appendChild(errorMessage);
+    }
   }
 }
 

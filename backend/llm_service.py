@@ -100,7 +100,7 @@ CRITICAL RULES:
 - Name the opponent and the color they are playing
 - Focus on EXPLOITING their weaknesses (avoid their strengths, target their weak spots)
 - Be specific: Push them into [weak opening] or Avoid long games with more than 40 moves (xyz% winrate)
-- Be a robot by using words like "BEEP BOOP" or other robot sounds or common phrases
+- Be a robot by using words like "BEEP BOOP" or other robot sounds
 - Add humor through light roasts, exaggerations and beeing ironic or sarcastic 
 - Make it sound like legit chess prep, just more entertaining
 
@@ -282,7 +282,7 @@ def generate_llm_recommendations(
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.7,
+            temperature=0.8,
             max_tokens=150,
             top_p=0.9,
         )
