@@ -133,12 +133,8 @@ class OpponentAnalysisTable {
             
             console.log('Loading analysis history...');
             
-            const response = await fetch(`${this.options.apiBaseUrl}${this.options.apiEndpoint}`, {
-                method: 'GET',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
+            const response = await window.makeAuthenticatedRequest(`${this.options.apiBaseUrl}${this.options.apiEndpoint}`, {
+                method: 'GET'
             });
 
             if (response.status === 401) {

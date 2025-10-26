@@ -2,18 +2,45 @@
 // Set API base URL based on environment
 window.API_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:8000'  // Development
-  : 'https://prepbot-3000.onrender.com';  // Production - update this after deployment
-// window.API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000');
+  : 'https://prepbot-3000.onrender.com';  // Production
+//window.API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000');
+
+
+// Helper function to make authenticated requests
+window.makeAuthenticatedRequest = async function(url, options = {}) {
+    // Set up headers
+    const headers = {
+        ...options.headers
+    };
+    
+    // Add Content-Type for requests with body
+    if (options.body && !headers['Content-Type']) {
+        headers['Content-Type'] = 'application/json';
+    }
+    
+    // Add Authorization header with session token
+    const sessionToken = localStorage.getItem('session_token');
+    if (sessionToken) {
+        headers['Authorization'] = `Bearer ${sessionToken}`;
+    }
+    
+    return fetch(url, {
+        ...options,
+        headers
+    });
+};
 
 window.logout = async function() {
     try {
-        await fetch(`${window.API_BASE_URL}/api/logout`, {
-            method: 'POST',
-            credentials: 'include'
+        await window.makeAuthenticatedRequest(`${window.API_BASE_URL}/api/logout`, {
+            method: 'POST'
         });
     } catch (error) {
         console.log('Logout request failed, but redirecting anyway');
     }
+    
+    // Clear localStorage session token
+    localStorage.removeItem('session_token');
     window.location.href = '/';
 };
 
@@ -26,12 +53,8 @@ window.loginWithLichess = async function() {
         }
 
         // Get OAuth URL from backend
-        const response = await fetch(`${window.API_BASE_URL}/api/auth/oauth-url`, {
-            method: 'GET',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+        const response = await window.makeAuthenticatedRequest(`${window.API_BASE_URL}/api/auth/oauth-url`, {
+            method: 'GET'
         });
 
         if (!response.ok) {
@@ -157,12 +180,8 @@ async function initializeLoginButton() {
   //const tableButtons = document.querySelector('.table-btns');
   
   try {
-    const response = await fetch(`${window.API_BASE_URL}/api/auth/status`, {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+    const response = await window.makeAuthenticatedRequest(`${window.API_BASE_URL}/api/auth/status`, {
+      method: 'GET'
     });
     
     const data = await response.json();

@@ -78,12 +78,8 @@
                 }
 
                 // Exchange the code for a token with the backend
-                const response = await fetch(`${API_BASE_URL}/api/auth/exchange-token`, {
+                const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/auth/exchange-token`, {
                     method: 'POST',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
                     body: JSON.stringify({ 
                         code: code,
                         code_verifier: codeVerifier
@@ -101,6 +97,11 @@
                     // Authentication successful
                     // Clean up sessionStorage
                     sessionStorage.removeItem('oauth_code_verifier');
+                    
+                    // Store session token in localStorage for production (cross-origin)
+                    if (data.session_token) {
+                        localStorage.setItem('session_token', data.session_token);
+                    }
                     
                     showSuccess();
                     // Redirect to dashboard after a short delay

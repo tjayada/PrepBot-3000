@@ -177,12 +177,8 @@
         async function startListeningForEvents() {
             console.log("Starting event listener...");
             try {
-                const response = await fetch(`${API_BASE_URL}/api/start_listening`, {
+                const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/start_listening`, {
                     method: 'POST',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
                     body: JSON.stringify({ duration: listeningDuration })
                 });
                 
@@ -214,12 +210,8 @@
         async function cancelListeningForEvents() {
             console.log("Cancelling event listener...");
             try {
-                const response = await fetch(`${API_BASE_URL}/api/cancel_listening`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/cancel_listening`, {
+                    method: 'POST'
                 });
                 
                 const data = await response.json();
@@ -305,12 +297,8 @@
 
         async function checkListeningStatus() {
             try {
-                const response = await fetch(`${API_BASE_URL}/api/listening_status`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/listening_status`, {
+                    method: 'GET'
                 });
                 
                 const data = await response.json();
@@ -348,12 +336,8 @@
 
                 // Debug: Making auth status request
                 
-                const response = await fetch(`${API_BASE_URL}/api/auth/status`, {
-                    method: 'GET',
-                    credentials: 'include', // Include session cookies
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/auth/status`, {
+                    method: 'GET'
                 });
 
                 // Debug: Response received
@@ -417,12 +401,8 @@
                 console.log('Loading user analysis...');
                 
                 // First, try to get existing analysis from database
-                const response = await fetch(`${API_BASE_URL}/api/user/analysis`, {
-                    method: 'GET',
-                    credentials: 'include',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
+                const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/user/analysis`, {
+                    method: 'GET'
                 });
 
                 if (response.status === 401) {
@@ -483,12 +463,8 @@
         async function analyzeUserColor(color) {
             console.log(`Analyzing user for ${color} pieces...`);
             
-            const response = await fetch(`${API_BASE_URL}/api/analyze_user`, {
+            const response = await window.makeAuthenticatedRequest(`${API_BASE_URL}/api/analyze_user`, {
                 method: 'POST',
-                credentials: 'include',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify({ color: color })
             });
 
@@ -581,8 +557,15 @@
                 return;
             }
             
+            // Get session token for authentication
+            const sessionToken = localStorage.getItem('session_token');
+            if (!sessionToken) {
+                console.error('No session token available for WebSocket connection');
+                return;
+            }
+            
             const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
-            websocket = new WebSocket(`${wsUrl}/ws`);
+            websocket = new WebSocket(`${wsUrl}/ws?token=${encodeURIComponent(sessionToken)}`);
             
             websocket.onopen = function(event) {
                 console.log('WebSocket connected');

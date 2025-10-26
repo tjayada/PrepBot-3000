@@ -24,7 +24,6 @@ from datetime import datetime, timedelta, timezone
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from starlette.middleware.sessions import SessionMiddleware
 from fastapi import (
     Cookie,
     FastAPI,
@@ -226,14 +225,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Add session middleware
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=SECRET_KEY,
-    max_age=60 * 60 * 24 * 30,  # 30 days
-    same_site="none",
-    https_only=ENVIRONMENT == "production",  # HTTPS only in production
-)
+# Session middleware removed - using JWT tokens stored in database instead
 
 PORT = int(os.getenv("PORT", 8000))
 
@@ -359,19 +351,21 @@ def verify_session_token(token: str, user_id: str = None) -> Optional[dict]:
 
 def get_current_user(request: Request) -> Optional[dict]:
     """Get current authenticated user from session token"""
-    session_token = request.cookies.get("session_token")
-
+    # Only accept Authorization header - no fallbacks
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        logger.warning("Missing or invalid Authorization header")
+        return None
+    
+    session_token = auth_header[7:]  # Remove "Bearer " prefix
+    
     if not session_token:
-        session_token = request.session.get("session_token")
-
-    if not session_token:
-        # No session token found
+        logger.warning("Empty session token in Authorization header")
         return None
 
     # Verifying session token
     token_payload = verify_session_token(session_token)
     if not token_payload:
-        # Session token verification failed
         return None
 
     # Get user data from database
@@ -397,12 +391,10 @@ def get_current_user(request: Request) -> Optional[dict]:
                 )
                 now = datetime.now(timezone.utc)
                 if expires_at < now:
-                    # Session expired
                     return None
             return user_data
     except Exception as e:
         logger.error(f"Error fetching user data: {e}")
-        # Error fetching user data - return None for security
         return None
 
     return None
@@ -786,17 +778,13 @@ async def exchange_token(request: Request, response: Response, token_data: dict)
         except APIError as e:
             raise HTTPException(status_code=500, detail=f"Database error: {e.message}")
 
-        response.set_cookie(
-            key="session_token",
-            value=session_token,
-            max_age=60 * 60 * 24 * SESSION_DURATION_DAYS,  # 30 days
-            httponly=True, 
-            secure=ENVIRONMENT == "production",
-            samesite="none",
-            domain=None,  # Allow cross-origin cookies
-        )
-
-        return {"success": True, "user_id": user_id, "message": "Authentication successful"}
+        # Always return session token in response for frontend to handle
+        return {
+            "success": True, 
+            "user_id": user_id, 
+            "message": "Authentication successful",
+            "session_token": session_token
+        }
 
     except HTTPException:
         raise
@@ -954,33 +942,22 @@ async def logout(request: Request, response: Response):
         if user:
             # remove from activity queue
             check_stream_events_queue.pop(user["id"], None)
-            # Invalidate session in database by deleting them
-            supabase.table("users").delete().eq("id", user["id"]).execute()
-
-            # revoke lichess token
+            
+            # Revoke lichess token - decrypt first
             if user.get("access_token"):
-                await revoke_lichess_token(user["access_token"])
-
-        # Clear the HTTP-only cookie
-        response.delete_cookie(
-            key="session_token",
-            httponly=True,
-            secure=ENVIRONMENT == "production",  # HTTPS only in production
-            samesite="lax",
-            domain=None,
-        )
+                try:
+                    decrypted_token = get_user_access_token(user)
+                    await revoke_lichess_token(decrypted_token)
+                except Exception as e:
+                    logger.error(f"Failed to revoke Lichess token: {e}")
+            
+            # Invalidate session token in database
+            supabase.table("users").update({"session_token": None}).eq("id", user["id"]).execute()
 
         return {"success": True, "message": "Logged out successfully"}
 
-    except Exception:
-        # Still clear the cookie even if DB update fails
-        response.delete_cookie(
-            key="session_token",
-            httponly=True,
-            secure=ENVIRONMENT == "production",  # HTTPS only in production
-            samesite="lax",
-            domain=None,
-        )
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
         return {"success": True, "message": "Logged out successfully"}
 
 
@@ -1005,13 +982,19 @@ async def auth_status(request: Request):
 
 @app.websocket("/ws")
 async def websocket_endpoint(
-    websocket: WebSocket, session_token: Optional[str] = Cookie(None)
+    websocket: WebSocket, token: Optional[str] = None
 ):
     """WebSocket endpoint for real-time analysis notifications"""
+    # Only accept token as query parameter - no fallbacks
+    if not token:
+        logger.warning("Missing token in WebSocket connection")
+        await websocket.close(code=WS_1008_POLICY_VIOLATION)
+        return
+    
     # Verify the user is authenticated by checking their session token
-    user_data = verify_session_token(session_token)
+    user_data = verify_session_token(token)
     if not user_data:
-        # Reject the connection if authentication fails
+        logger.warning("Invalid token in WebSocket connection")
         await websocket.close(code=WS_1008_POLICY_VIOLATION)
         return
 
@@ -1027,7 +1010,6 @@ async def websocket_endpoint(
             try:
                 await websocket.receive_text()
             except WebSocketDisconnect:
-                # WebSocket disconnected
                 break
             except Exception as e:
                 logger.error(f"WebSocket receive error for user {user_id}: {e}")
