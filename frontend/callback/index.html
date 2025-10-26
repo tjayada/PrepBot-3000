@@ -71,6 +71,12 @@
                     throw new Error('No authorization code received from Lichess');
                 }
 
+                // Get the code verifier from sessionStorage
+                const codeVerifier = sessionStorage.getItem('oauth_code_verifier');
+                if (!codeVerifier) {
+                    throw new Error('No code verifier found. Please try logging in again.');
+                }
+
                 // Exchange the code for a token with the backend
                 const response = await fetch(`${API_BASE_URL}/api/auth/exchange-token`, {
                     method: 'POST',
@@ -78,7 +84,10 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ code: code })
+                    body: JSON.stringify({ 
+                        code: code,
+                        code_verifier: codeVerifier
+                    })
                 });
 
                 if (!response.ok) {
@@ -90,6 +99,9 @@
                 
                 if (data.success) {
                     // Authentication successful
+                    // Clean up sessionStorage
+                    sessionStorage.removeItem('oauth_code_verifier');
+                    
                     showSuccess();
                     // Redirect to dashboard after a short delay
                     setTimeout(() => {

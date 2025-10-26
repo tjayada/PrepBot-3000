@@ -40,11 +40,14 @@ window.loginWithLichess = async function() {
 
         const data = await response.json();
         
-        if (data.oauth_url) {
+        if (data.oauth_url && data.code_verifier) {
+            // Store the code verifier for later use
+            sessionStorage.setItem('oauth_code_verifier', data.code_verifier);
+            
             // Redirect to Lichess OAuth
             window.location.href = data.oauth_url;
         } else {
-            throw new Error('No OAuth URL received');
+            throw new Error('No OAuth URL or code verifier received');
         }
 
     } catch (error) {

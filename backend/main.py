@@ -724,8 +724,6 @@ async def get_oauth_url(request: Request):
     verifier = create_verifier()
     challenge = create_challenge(verifier)
 
-    request.session["code_verifier"] = verifier
-
     oauth_params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
@@ -736,7 +734,7 @@ async def get_oauth_url(request: Request):
     }
 
     oauth_url = f"https://lichess.org/oauth?{urlencode(oauth_params)}"
-    return {"oauth_url": oauth_url}
+    return {"oauth_url": oauth_url, "code_verifier": verifier}
 
 
 @app.post("/api/auth/exchange-token")
@@ -744,12 +742,13 @@ async def exchange_token(request: Request, response: Response, token_data: dict)
     """Exchange OAuth code for access token and create session"""
     try:
         code = token_data.get("code")
+        verifier = token_data.get("code_verifier")
+        
         if not code:
             raise HTTPException(status_code=400, detail="No authorization code provided")
-
-        verifier = request.session.get("code_verifier")
+        
         if not verifier:
-            raise HTTPException(status_code=400, detail="No code verifier found in session")
+            raise HTTPException(status_code=400, detail="No code verifier provided")
 
         redirect_uri = f"{FRONTEND_URL}/callback"
 
@@ -786,9 +785,6 @@ async def exchange_token(request: Request, response: Response, token_data: dict)
             supabase.table("users").upsert(data, on_conflict="id").execute()
         except APIError as e:
             raise HTTPException(status_code=500, detail=f"Database error: {e.message}")
-
-        # Clean up OAuth session data
-        request.session.pop("code_verifier", None)
 
         response.set_cookie(
             key="session_token",
