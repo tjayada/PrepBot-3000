@@ -282,6 +282,14 @@ class ConnectionManager:
         self.active_connections: Dict[str, WebSocket] = {}
 
     async def connect(self, websocket: WebSocket, user_id: str):
+        # If user already has a connection, close the old one first
+        if user_id in self.active_connections:
+            try:
+                old_websocket = self.active_connections[user_id]
+                await old_websocket.close(code=1000, reason="New connection established")
+            except Exception as e:
+                logger.warning(f"Error closing old WebSocket for user {user_id}: {e}")
+        
         self.active_connections[user_id] = websocket
         if ENVIRONMENT == "development":
             logger.debug(f"WebSocket connected for user: {user_id}")
@@ -299,6 +307,17 @@ class ConnectionManager:
                 # WebSocket message sent
             except Exception as e:
                 logger.error(f"Error sending WebSocket message to {user_id}: {e}")
+                self.disconnect(user_id)
+
+    async def close_user_connection(self, user_id: str, code: int = 1000, reason: str = "Connection closed"):
+        """Gracefully close a user's WebSocket connection"""
+        if user_id in self.active_connections:
+            try:
+                websocket = self.active_connections[user_id]
+                await websocket.close(code=code, reason=reason)
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket for user {user_id}: {e}")
+            finally:
                 self.disconnect(user_id)
 
 
@@ -508,12 +527,21 @@ async def revoke_lichess_token(access_token: str):
             headers={"Authorization": f"Bearer {access_token}"},
         )
         response.raise_for_status()
-        return response.json()
+        
+        # Lichess returns empty response on successful revocation
+        # Try to parse JSON, but don't fail if it's empty
+        try:
+            return response.json() if response.text.strip() else {"message": "Token revoked"}
+        except json.JSONDecodeError:
+            return {"message": response.text or "Token revoked"}
+            
     except httpx.HTTPStatusError as e:
         logger.error(f"HTTP error revoking Lichess token: {e}")
-        raise HTTPException(
-            status_code=400, detail="Failed to revoke access token from Lichess"
-        )
+        # Don't raise exception - logout should succeed even if revocation fails
+        return {"error": f"Failed to revoke token: {e}"}
+    except Exception as e:
+        logger.error(f"Unexpected error revoking Lichess token: {e}")
+        return {"error": f"Unexpected error: {e}"}
 
 
 async def generate_prep(
@@ -977,27 +1005,34 @@ async def start_listening(
 
 @app.post("/api/logout")
 async def logout(request: Request, response: Response):
-    """Logout user and invalidate session"""
+    """Logout user and delete from database"""
     try:
-        # Get current user to invalidate their session
+        # Get current user to delete their data
         user = get_current_user(request)
         if user:
-            # remove from activity queue
-            check_stream_events_queue.pop(user["id"], None)
+            user_id = user["id"]
             
-            # Revoke lichess token - decrypt first
+            # Remove from activity queue
+            check_stream_events_queue.pop(user_id, None)
+            
+            # Close WebSocket connection if active
+            await manager.close_user_connection(user_id, code=1000, reason="User logged out")
+            
+            # Revoke Lichess token before deleting user data
             if user.get("access_token"):
                 try:
                     decrypted_token = get_user_access_token(user)
-                    await revoke_lichess_token(decrypted_token)
+                    revoke_result = await revoke_lichess_token(decrypted_token)
+                    if revoke_result.get("error"):
+                        logger.warning(f"Token revocation warning for {user_id}: {revoke_result['error']}")
                 except Exception as e:
-                    logger.error(f"Failed to revoke Lichess token: {e}")
+                    logger.error(f"Failed to revoke Lichess token for {user_id}: {e}")
             
-            # Invalidate session token in database
-            supabase.table("users").update({"session_token": None}).eq("id", user["id"]).execute()
-            
-            # Log successful logout
-            logger.info(f"User logged out: {user['id']}")
+            # Delete user from database (this removes all tokens and session data)
+            try:
+                supabase.table("users").delete().eq("id", user_id).execute()
+            except Exception as e:
+                logger.error(f"Failed to delete user {user_id} from database: {e}")
 
         return {"success": True, "message": "Logged out successfully"}
 

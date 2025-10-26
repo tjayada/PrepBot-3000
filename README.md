@@ -36,6 +36,7 @@ _A fun chess preparation tool that analyzes your Lichess opponents in real-time,
 <br>
 
 ## Table of Contents
+
 <details>
 <summary>"Click to expand"</summary>
 
@@ -46,12 +47,16 @@ _A fun chess preparation tool that analyzes your Lichess opponents in real-time,
 	* [Analysis Pipeline](#analysis-pipeline)
 4. [Architecture](#architecture)
 5. [Key Technical Details](#key-technical-details)
-6. [Architecture](#architecture)
 7. [Deployment](#deployment)
 8. [Project Structure](#project-structure)
 9. [Screenshots](#screenshots)
+10. [Contributing](#contributing)
+11. [License](#license) 
+12. [Acknowledgments](#acknowledgments)
+13. [Disclaimer](#disclaimer)
 
 </details>
+
 
 <br>
 
@@ -107,32 +112,22 @@ The bot analyzes your opponent's recent games, extracts the most influential pat
 
 ### Analysis Pipeline
 
-**Fetch Recent Games**  
+1. **Fetch Recent Games**  
 Retrieves opponent's last 50 rated games (blitz, rapid, classical)
 
-↓
-
-**Feature Extraction**  
+2. **Feature Extraction**  
 Analyzes opening preferences, time management, game length, and decision-making habits
 
-↓
-
-**Information Gain Calculation**  
+3. **Information Gain Calculation**  
 Identifies which features most strongly predict game outcomes
 
-↓
-
-**Context Building**  
+4. **Context Building**  
 Packages top insights with statistical context
 
-↓
-
-**LLM Enhancement**  
+5. **LLM Enhancement**  
 Groq API adds personality and actionable recommendations
 
-↓
-
-**Display**  
+6. **Display**  
 Results appear in interactive tables on the dashboard
 
 
@@ -158,7 +153,7 @@ Results appear in interactive tables on the dashboard
   - `pandas` & `numpy`: Statistical analysis
   - `groq`: LLM inference
   - `supabase`: Database (PostgreSQL)
-  - `websockets`: Real-time communication
+  - `fastapi`: High-performance web framework
 
 ### Database (Supabase)
 - **users**: Authentication, session management
@@ -229,10 +224,20 @@ cd backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **Frontend:**
+
+I sometimes experienced trouble because of cross-origin errors and similar, so the easiest often was to uncomment / comment the following lines 3-6 in [script.js](frontend/script.js) 
+
+```javascript
+//window.API_BASE_URL = window.location.hostname === 'localhost' 
+//  ? 'http://localhost:8000'  // Development
+//  : 'https://prepbot-3000.onrender.com';  // Production
+window.API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000');
+```
+and then simply
 
 ```bash
 cd frontend
@@ -271,16 +276,29 @@ prepbot-3000/
 
 ## Screenshots
 
-> **TODO**: Add screenshots:
+<img
+	  src="images/screenshot-home.png"
+	  alt="PrepBot-3000"
+	  height="50%"
+	/>
 
-### Recommended Images:
-1. **Landing Page Hero** (`assets/images/hero.png`) - Show the robot character and main CTA
-2. **Dashboard View** (`assets/images/dashboard.png`) - Analysis tables with example data
-3. **Analysis Detail** (`assets/images/analysis-detail.png`) - Expanded view of opponent insights
-4. **Public Table** (`assets/images/public-table.png`) - Community analysis showcase
-5. **Mobile View** (`assets/images/mobile.png`) - Responsive design on phone
+<img
+	  src="images/screenshot-dashboard.png"
+	  alt="PrepBot-3000"
+	  height="50%"
+	/>
 
----
+
+
+
+| Home | Public Table |
+|:---------:|:--------:|
+| <img src="images/screenshot-home-mobile-1.png" width="250"/> | <img src="images/screenshot-public-table-mobile-1.png" width="250"/> |
+| <img src="images/screenshot-home-mobile-2.png" width="250"/> | <img src="images/screenshot-public-table-mobile-2.png" width="250"/> |
+
+
+<br>
+
 
 ## Contributing
 
@@ -292,13 +310,13 @@ If you still want to contribute:
 3. Make your changes (with appropriate jokes)
 4. Submit a pull request
 
----
+<br>
 
 ## License
 
 See [LICENSE](LICENSE) file for details.
 
----
+<br>
 
 ## Acknowledgments
 
@@ -306,7 +324,7 @@ See [LICENSE](LICENSE) file for details.
 - [Groq](https://groq.com) for lightning-fast LLM inference
 - The chess community for inspiration (and opponents)
 
----
+<br>
 
 ## Disclaimer
 
