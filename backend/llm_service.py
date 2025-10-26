@@ -291,4 +291,4 @@ def generate_llm_recommendations(
 
     except Exception as e:
         logger.error(f"Error generating LLM recommendations: {e}")
-        return "Failed to generate recommendations - check your API key and connection."
+        return "❌ Failed to generate recommendations - check your API key and connection."

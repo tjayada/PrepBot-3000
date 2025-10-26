@@ -25,7 +25,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from fastapi import (
-    Cookie,
     FastAPI,
     Request,
     Depends,
@@ -58,6 +57,16 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
 # Configure logging
 LOG_LEVEL = os.getenv("LOG_LEVEL", "WARNING")
+
+# Custom formatter for structured logging
+class ProductionFormatter(logging.Formatter):
+    def format(self, record):
+        # Add request ID if available
+        if hasattr(record, 'request_id'):
+            record.msg = f"[{record.request_id}] {record.msg}"
+        return super().format(record)
+
+# Configure root logger
 logging.basicConfig(
     level=getattr(logging, LOG_LEVEL.upper()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -65,12 +74,29 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
+
+# Apply custom formatter
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(ProductionFormatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+
 logger = logging.getLogger(__name__)
 
 # Reduce logging verbosity in production
 if ENVIRONMENT == "production":
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # Suppress noisy loggers
+    logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("uvicorn.access").setLevel(logging.ERROR)
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+    logging.getLogger("websockets").setLevel(logging.ERROR)
+    logging.getLogger("berserk").setLevel(logging.ERROR)
+    
+    # Only log critical events from external libraries
+    logging.getLogger("supabase").setLevel(logging.ERROR)
+    logging.getLogger("postgrest").setLevel(logging.ERROR)
+else:
+    # Development: more verbose
+    logging.getLogger("httpx").setLevel(logging.INFO)
+    logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 
 ############### Setup ###############
@@ -116,9 +142,18 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request_id = str(uuid.uuid4())[:8]
         request.state.request_id = request_id
 
-        # Add request ID to logger context (only log in development)
+        # Add request ID to logger context
         if ENVIRONMENT == "development":
             logger.debug(f"Request {request_id}: {request.method} {request.url.path}")
+        
+        # Log important requests in production (authentication, analysis, etc.)
+        if ENVIRONMENT == "production" and request.url.path in [
+            "/api/auth/exchange-token", 
+            "/api/analyze_user", 
+            "/api/start_listening",
+            "/api/logout"
+        ]:
+            logger.info(f"Request {request_id}: {request.method} {request.url.path}")
 
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
@@ -213,7 +248,6 @@ def decrypt_token(encrypted_token: str) -> str:
 def get_user_access_token(user_data: dict) -> Optional[str]:
     raw = user_data.get("access_token") if user_data else None
     return decrypt_token(raw)
-    # return user_data.get("access_token")
 
 
 # Add CORS middleware for frontend
@@ -239,8 +273,7 @@ httpx_client = httpx.AsyncClient(
 executor = ThreadPoolExecutor(max_workers=10)
 check_stream_events_queue = {}
 
-# Temporary storage for OAuth verifiers (in production, use Redis or database)
-oauth_verifiers = {}
+# OAuth verifiers removed - using stateless OAuth flow
 
 
 # WebSocket connection manager
@@ -250,12 +283,14 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, user_id: str):
         self.active_connections[user_id] = websocket
-        # WebSocket connected
+        if ENVIRONMENT == "development":
+            logger.debug(f"WebSocket connected for user: {user_id}")
 
     def disconnect(self, user_id: str):
         if user_id in self.active_connections:
             del self.active_connections[user_id]
-            # WebSocket disconnected
+            if ENVIRONMENT == "development":
+                logger.debug(f"WebSocket disconnected for user: {user_id}")
 
     async def send_personal_message(self, message: dict, user_id: str):
         if user_id in self.active_connections:
@@ -354,7 +389,7 @@ def get_current_user(request: Request) -> Optional[dict]:
     # Only accept Authorization header - no fallbacks
     auth_header = request.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
-        logger.warning("Missing or invalid Authorization header")
+        #logger.warning("Missing or invalid Authorization header")
         return None
     
     session_token = auth_header[7:]  # Remove "Bearer " prefix
@@ -470,7 +505,7 @@ async def revoke_lichess_token(access_token: str):
     try:
         response = await httpx_client.delete(
             "https://lichess.org/api/token",
-            headers=({"Authorization": f"Bearer {access_token}"},),
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         response.raise_for_status()
         return response.json()
@@ -685,6 +720,9 @@ async def handle_game_start_event(
 
     try:
         supabase.table("analytics").upsert(data, on_conflict="game_id").execute()
+        
+        # Log successful analysis generation
+        logger.info(f"Analysis generated for {opponent_id} ({opponent_color}) by {user_id}")
 
         # Send WebSocket notification to the user about new analysis
         notification = {
@@ -698,6 +736,7 @@ async def handle_game_start_event(
 
     except APIError:
         # Database error - analysis not stored
+        logger.error(f"Failed to store analysis for {opponent_id} by {user_id}")
         pass
 
 
@@ -777,6 +816,9 @@ async def exchange_token(request: Request, response: Response, token_data: dict)
             supabase.table("users").upsert(data, on_conflict="id").execute()
         except APIError as e:
             raise HTTPException(status_code=500, detail=f"Database error: {e.message}")
+
+        # Log successful authentication
+        logger.info(f"User authenticated: {user_id}")
 
         # Always return session token in response for frontend to handle
         return {
@@ -953,6 +995,9 @@ async def logout(request: Request, response: Response):
             
             # Invalidate session token in database
             supabase.table("users").update({"session_token": None}).eq("id", user["id"]).execute()
+            
+            # Log successful logout
+            logger.info(f"User logged out: {user['id']}")
 
         return {"success": True, "message": "Logged out successfully"}
 
