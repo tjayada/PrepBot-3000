@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrepBot-3000 Authentication Complete</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="icon" type="image/png" href="/assets/favicons/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/assets/favicons/favicon.svg" />
+    <link rel="shortcut icon" href="/assets/favicons/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicons/apple-touch-icon.png" />
+    <link rel="manifest" href="/assets/favicons/site.webmanifest" />
+    <meta name="theme-color" content="#2c3e50" />
+</head>
+<body>
+    <div class="main-content">
+        <!-- Header -->
+        <div class="header">
+            <h1>PrepBot-3000 Authentication</h1>
+            <div class="nav-buttons">
+                <a href='/' class="btn btn--neutral">Home</a>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="loading">
+            <p>Processing authentication...</p>
+        </div>
+        
+        <!-- Error State -->
+        <div id="error" class="error hidden">
+            <p id="error-message"></p>
+            <a href="/" class="btn btn--primary">Return Home</a>
+        </div>
+
+        <!-- Success State -->
+        <div id="success" class="success hidden">
+            <h2>🎉 Authentication Complete!</h2>
+            <p>You have successfully logged in to PrepBot-3000. Redirecting to dashboard...</p>
+            <a href="/dashboard" class="btn btn--success">Go to Dashboard</a>
+        </div>
+
+        <!-- Chessboard Background -->
+        <div class="chessboard" id="chessboard"></div>
+        <script src="/script.js"></script>
+    </div>
+
+    <script>
+        // Use shared API base URL from global
+        const API_BASE_URL = window.API_BASE_URL;
+
+        // Initialize callback handling when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            handleCallback();
+        });
+
+        async function handleCallback() {
+            try {
+                showLoading();
+
+                // Check URL parameters from Lichess OAuth callback
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const error = urlParams.get('error');
+
+                if (error) {
+                    throw new Error(`OAuth error: ${error}`);
+                }
+
+                if (!code) {
+                    throw new Error('No authorization code received from Lichess');
+                }
+
+                // Exchange the code for a token with the backend
+                const response = await fetch(`${API_BASE_URL}/api/auth/exchange-token`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ code: code })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || `HTTP ${response.status}: Failed to exchange token`);
+                }
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Authentication successful
+                    showSuccess();
+                    // Redirect to dashboard after a short delay
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 2000);
+                } else {
+                    throw new Error(data.message || 'Token exchange failed');
+                }
+
+            } catch (error) {
+                console.error('Callback handling error:', error);
+                showError('Authentication failed: ' + error.message);
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('success').classList.add('hidden');
+        }
+
+        function showError(message) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+            document.getElementById('success').classList.add('hidden');
+            document.getElementById('error-message').textContent = message;
+        }
+
+        function showSuccess() {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            document.getElementById('success').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

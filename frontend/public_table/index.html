@@ -264,9 +264,7 @@
                     if (authButton) {
                         authButton.textContent = 'Login';
                         authButton.className = 'btn btn--success';
-                        authButton.onclick = () => {
-                            window.location.href = `${API_BASE_URL}/auth/login`;
-                        };
+                        authButton.onclick = loginWithLichess;
                     }
                 }
             }

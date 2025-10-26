@@ -718,11 +718,9 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
-@app.get("/auth/login")
-async def login(request: Request):
-    """Initiate OAuth login with Lichess"""
-    base_url = BASE_URL
-
+@app.get("/api/auth/oauth-url")
+async def get_oauth_url(request: Request):
+    """Get OAuth URL for frontend to redirect to Lichess"""
     verifier = create_verifier()
     challenge = create_challenge(verifier)
 
@@ -731,81 +729,177 @@ async def login(request: Request):
     oauth_params = {
         "response_type": "code",
         "client_id": CLIENT_ID,
-        "redirect_uri": f"{base_url}/auth/callback",
+        "redirect_uri": f"{FRONTEND_URL}/callback",
         "scope": "preference:read challenge:read",
         "code_challenge_method": "S256",
         "code_challenge": challenge,
     }
 
     oauth_url = f"https://lichess.org/oauth?{urlencode(oauth_params)}"
-    return RedirectResponse(oauth_url)
+    return {"oauth_url": oauth_url}
 
 
-@app.get("/auth/callback")
-async def callback(request: Request, code: str = None):
-    """Handle OAuth callback from Lichess"""
-    if not code:
-        raise HTTPException(status_code=400, detail="No authorization code provided")
-
-    verifier = request.session.get("code_verifier")
-    if not verifier:
-        raise HTTPException(status_code=400, detail="No code verifier found in session")
-
-    base_url = BASE_URL
-    redirect_uri = f"{base_url}/auth/callback"
-
-    lichess_token = await get_lichess_token(code, verifier, redirect_uri)
-
-    if not lichess_token.get("access_token"):
-        raise HTTPException(status_code=400, detail="Failed getting token")
-
-    access_token = lichess_token["access_token"]
-    lichess_user = await get_lichess_user(access_token)
-    user_id = lichess_user.get("username")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="Failed getting user info")
-
-    now = datetime.now(timezone.utc)
-    token_expires_at = now + timedelta(hours=1)
-    session_expires_at = now + timedelta(
-        days=SESSION_DURATION_DAYS
-    )  # Long-lived session
-
-    # Generate secure session token
-    session_token = generate_session_token(user_id)
-
-    data = {
-        "id": user_id,
-        "access_token": encrypt_token(access_token),
-        "token_expires_at": token_expires_at.isoformat(),
-        "session_expires_at": session_expires_at.isoformat(),
-        "session_token": session_token,  # Store session token in DB
-        "created_at": now.isoformat(),
-    }
-
+@app.post("/api/auth/exchange-token")
+async def exchange_token(request: Request, response: Response, token_data: dict):
+    """Exchange OAuth code for access token and create session"""
     try:
-        supabase.table("users").upsert(data, on_conflict="id").execute()
-    except APIError as e:
-        raise HTTPException(status_code=500, detail=f"Supabase error: {e.message}")
+        code = token_data.get("code")
+        if not code:
+            raise HTTPException(status_code=400, detail="No authorization code provided")
 
-    # Clean up OAuth session data
-    request.session.pop("code_verifier", None)
+        verifier = request.session.get("code_verifier")
+        if not verifier:
+            raise HTTPException(status_code=400, detail="No code verifier found in session")
 
-    # Create response with HTTP-only cookie
-    response = RedirectResponse(f"{FRONTEND_URL}/dashboard", status_code=303)
+        redirect_uri = f"{FRONTEND_URL}/callback"
 
-    # Set HTTP-only cookie for session token (more secure than session storage)
-    response.set_cookie(
-        key="session_token",
-        value=session_token,
-        max_age=60 * 60 * 24 * SESSION_DURATION_DAYS,  # 30 days
-        httponly=True,  # Prevent XSS attacks
-        secure=ENVIRONMENT == "production",  # HTTPS only in production
-        samesite="none",
-        domain=None,  # Allow cross-origin cookies
-    )
+        lichess_token = await get_lichess_token(code, verifier, redirect_uri)
 
-    return response
+        if not lichess_token.get("access_token"):
+            raise HTTPException(status_code=400, detail="Failed getting token from Lichess")
+
+        access_token = lichess_token["access_token"]
+        lichess_user = await get_lichess_user(access_token)
+        user_id = lichess_user.get("username")
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Failed getting user info from Lichess")
+
+        now = datetime.now(timezone.utc)
+        token_expires_at = now + timedelta(hours=1)
+        session_expires_at = now + timedelta(
+            days=SESSION_DURATION_DAYS
+        )  # Long-lived session
+
+        # Generate secure session token
+        session_token = generate_session_token(user_id)
+
+        data = {
+            "id": user_id,
+            "access_token": encrypt_token(access_token),
+            "token_expires_at": token_expires_at.isoformat(),
+            "session_expires_at": session_expires_at.isoformat(),
+            "session_token": session_token,  # Store session token in DB
+            "created_at": now.isoformat(),
+        }
+
+        try:
+            supabase.table("users").upsert(data, on_conflict="id").execute()
+        except APIError as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {e.message}")
+
+        # Clean up OAuth session data
+        request.session.pop("code_verifier", None)
+
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            max_age=60 * 60 * 24 * SESSION_DURATION_DAYS,  # 30 days
+            httponly=True, 
+            secure=ENVIRONMENT == "production",
+            samesite="none",
+            domain=None,  # Allow cross-origin cookies
+        )
+
+        return {"success": True, "user_id": user_id, "message": "Authentication successful"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Catch any unexpected errors
+        error_message = f"Unexpected error during token exchange: {str(e)}"
+        logger.error(error_message, exc_info=True)
+        raise HTTPException(status_code=500, detail=error_message)
+
+'''
+@app.get("/auth/callback")
+async def callback(request: Request, code: str = None, error: str = None):
+    """Handle OAuth callback from Lichess"""
+    try:
+        # Handle OAuth errors
+        if error:
+            error_message = f"OAuth error: {error}"
+            logger.error(error_message)
+            return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+
+        if not code:
+            error_message = "No authorization code provided"
+            logger.error(error_message)
+            return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+
+        verifier = request.session.get("code_verifier")
+        if not verifier:
+            error_message = "No code verifier found in session"
+            logger.error(error_message)
+            return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+
+        base_url = BASE_URL
+        redirect_uri = f"{base_url}/auth/callback"
+
+        lichess_token = await get_lichess_token(code, verifier, redirect_uri)
+
+        if not lichess_token.get("access_token"):
+            error_message = "Failed getting token from Lichess"
+            logger.error(error_message)
+            return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+
+        access_token = lichess_token["access_token"]
+        lichess_user = await get_lichess_user(access_token)
+        user_id = lichess_user.get("username")
+        if not user_id:
+            error_message = "Failed getting user info from Lichess"
+            logger.error(error_message)
+            return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+
+        now = datetime.now(timezone.utc)
+        token_expires_at = now + timedelta(hours=1)
+        session_expires_at = now + timedelta(
+            days=SESSION_DURATION_DAYS
+        )  # Long-lived session
+
+        # Generate secure session token
+        session_token = generate_session_token(user_id)
+
+        data = {
+            "id": user_id,
+            "access_token": encrypt_token(access_token),
+            "token_expires_at": token_expires_at.isoformat(),
+            "session_expires_at": session_expires_at.isoformat(),
+            "session_token": session_token,  # Store session token in DB
+            "created_at": now.isoformat(),
+        }
+
+        try:
+            supabase.table("users").upsert(data, on_conflict="id").execute()
+        except APIError as e:
+            error_message = f"Database error: {e.message}"
+            logger.error(error_message)
+            return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+
+        # Clean up OAuth session data
+        request.session.pop("code_verifier", None)
+
+        # Create response with HTTP-only cookie
+        response = RedirectResponse(f"{FRONTEND_URL}/callback?success=true", status_code=303)
+
+        # Set HTTP-only cookie for session token (more secure than session storage)
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            max_age=60 * 60 * 24 * SESSION_DURATION_DAYS,  # 30 days
+            httponly=True,  # Prevent XSS attacks
+            secure=ENVIRONMENT == "production",  # HTTPS only in production
+            samesite="none",
+            domain=None,  # Allow cross-origin cookies
+        )
+
+        return response
+
+    except Exception as e:
+        # Catch any unexpected errors
+        error_message = f"Unexpected error during authentication: {str(e)}"
+        logger.error(error_message, exc_info=True)
+        return RedirectResponse(f"{FRONTEND_URL}/callback?error={error_message}")
+'''
 
 
 @app.post("/api/start_listening")

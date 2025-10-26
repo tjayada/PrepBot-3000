@@ -3,6 +3,7 @@
 window.API_BASE_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:8000'  // Development
   : 'https://prepbot-3000.onrender.com';  // Production - update this after deployment
+// window.API_BASE_URL = window.API_BASE_URL || window.location.origin.replace(':3000', ':8000');
 
 window.logout = async function() {
     try {
@@ -14,6 +15,48 @@ window.logout = async function() {
         console.log('Logout request failed, but redirecting anyway');
     }
     window.location.href = '/';
+};
+
+window.loginWithLichess = async function() {
+    try {
+        // Show loading state
+        const ctaContainer = document.getElementById('primary-cta');
+        if (ctaContainer) {
+            ctaContainer.innerHTML = '<p>Redirecting to Lichess...</p>';
+        }
+
+        // Get OAuth URL from backend
+        const response = await fetch(`${window.API_BASE_URL}/api/auth/oauth-url`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to get OAuth URL');
+        }
+
+        const data = await response.json();
+        
+        if (data.oauth_url) {
+            // Redirect to Lichess OAuth
+            window.location.href = data.oauth_url;
+        } else {
+            throw new Error('No OAuth URL received');
+        }
+
+    } catch (error) {
+        console.error('Login error:', error);
+        // Reset UI on error
+        const ctaContainer = document.getElementById('primary-cta');
+        if (ctaContainer) {
+            ctaContainer.innerHTML = '';
+            initializeLoginButton();
+        }
+        alert('Login failed: ' + error.message);
+    }
 };
 
 const chessboard = document.getElementById('chessboard');
@@ -107,14 +150,8 @@ checkInactivity();
 
 // Initialize login state and display appropriate buttons
 async function initializeLoginButton() {
-  const loginBtn = document.getElementById('login-button');
   const ctaContainer = document.getElementById('primary-cta');
   //const tableButtons = document.querySelector('.table-btns');
-  
-  // Set login button href
-  if (loginBtn) {
-    loginBtn.href = `${window.API_BASE_URL}/auth/login`;
-  }
   
   try {
     const response = await fetch(`${window.API_BASE_URL}/api/auth/status`, {
@@ -161,7 +198,7 @@ async function initializeLoginButton() {
         const loginBtn = createButton(
             'Login with Lichess', 
             'btn--success', 
-            () => window.location.href = `${window.API_BASE_URL}/auth/login`
+            loginWithLichess
         );
         
         const publicTableBtn = createButton(
