@@ -24,7 +24,7 @@
                 <a href='/' class="btn btn--neutral">Home</a>
                 <a href='/dashboard' class="btn btn--primary">Dashboard</a>
                 <a href='/public_table' class="btn btn--primary">Public Table</a>
-                <button onclick="logout()" class="btn btn--danger">Logout</button>
+                <button onclick="handleLogout()" class="btn btn--danger">Logout</button>
             </div>
         </div>
     
@@ -133,17 +133,6 @@
 
         // Load dashboard when page loads
         document.addEventListener('DOMContentLoaded', function() {
-
-            // Debug: Check session cookie (removed sensitive logging)
-
-            // Bind logout event to the logout button in navigation
-            const logoutBtn = document.getElementById('logout-link');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    logout();
-                });
-            }
 
             initializeDashboard();
             checkListeningStatus(); // Check if already listening
@@ -589,13 +578,17 @@
             };
             
             websocket.onclose = function(event) {
-                console.log('WebSocket disconnected');
-                // Attempt to reconnect after 3 seconds
-                setTimeout(() => {
-                    if (currentUserId) {
-                        connectWebSocket();
-                    }
-                }, 3000);
+                console.log('WebSocket disconnected:', event.code, event.reason);
+                websocket = null;
+                // Only attempt automatic reconnection for unexpected closures (not intentional disconnects)
+                if (currentUserId && event.code !== 1000) {
+                    console.log('Unexpected WebSocket closure, attempting reconnection');
+                    setTimeout(() => {
+                        if (currentUserId && !websocket) {
+                            connectWebSocket();
+                        }
+                    }, 3000);
+                }
             };
             
             websocket.onerror = function(error) {
@@ -605,22 +598,43 @@
 
         function disconnectWebSocket() {
             if (websocket) {
-                websocket.close();
+                // Use clean close code to prevent backend reconnection attempts
+                websocket.close(1000, 'Page navigation');
                 websocket = null;
             }
         }
 
-        // Clean up resources when page is unloaded
-        window.addEventListener('beforeunload', function() {
+        // Simple Navigation-Based WebSocket Cleanup
+        function setupNavigationCleanup() {
+            // Add click handlers to all navigation links
+            const navLinks = document.querySelectorAll('.nav-buttons a[href]');
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    disconnectWebSocket();
+                    stopCountdownTimer();
+                    if (analysisHistoryTable) {
+                        analysisHistoryTable.destroy();
+                    }
+                });
+            });
+        }
+
+        // Handle logout with WebSocket cleanup
+        function handleLogout() {
             disconnectWebSocket();
             stopCountdownTimer();
             if (analysisHistoryTable) {
                 analysisHistoryTable.destroy();
             }
-        });
+            // Call the global logout function
+            logout();
+        }
 
-        // Also clean up when navigating away
-        window.addEventListener('pagehide', function() {
+        // Initialize navigation cleanup after DOM is ready
+        document.addEventListener('DOMContentLoaded', setupNavigationCleanup);
+
+        // Fallback cleanup for edge cases (manual URL entry, browser back button)
+        window.addEventListener('beforeunload', function() {
             disconnectWebSocket();
             stopCountdownTimer();
             if (analysisHistoryTable) {
