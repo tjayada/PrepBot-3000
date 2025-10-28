@@ -31,7 +31,7 @@
 </div>
 
 
-_A fun chess preparation tool that analyzes your Lichess opponents in real-time, because why should Magnus Carlsen have all the prep fun?_
+_A fun chess preparation tool that analyzes your Lichess opponents in real-time._
 
 <br>
 
@@ -209,11 +209,6 @@ ENVIRONMENT=production
 PORT=8000
 ```
 
-**Frontend:**
-
-```bash
-VITE_API_URL=<backend-url>
-```
 
 ### Run Locally
 
@@ -266,7 +261,7 @@ prepbot-3000/
 │   ├── css/                 # CSS styling for web app
 │   └── script.js            # Client-side logic
 ├── images                   # Screenshots of app
-├── .gitignore               # Screenshots of app
+├── .gitignore               
 ├── LICENSE                  # MIT License
 └── README.md                # You are here
 
@@ -287,14 +282,6 @@ prepbot-3000/
 	  alt="PrepBot-3000"
 	  height="50%"
 	/>
-
-
-
-
-| Home | Public Table |
-|:---------:|:--------:|
-| <img src="images/screenshot-home-mobile-1.png" width="250"/> | <img src="images/screenshot-public-table-mobile-1.png" width="250"/> |
-| <img src="images/screenshot-home-mobile-2.png" width="250"/> | <img src="images/screenshot-public-table-mobile-2.png" width="250"/> |
 
 
 <br>

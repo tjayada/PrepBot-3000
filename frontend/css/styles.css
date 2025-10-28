@@ -699,6 +699,7 @@ input:checked + .slider:before {
   padding: 18px;
   display: flex;
   align-items: start;
+  text-align: justify;
   justify-content: space-between;
   gap: 12px;
   box-shadow: 0 2px 10px rgba(0,0,0,0.35);
