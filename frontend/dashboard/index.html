@@ -541,48 +541,37 @@
 
         // WebSocket Functions
         function connectWebSocket() {
-            if (!currentUserId) {
-                console.error('No user ID available for WebSocket connection');
-                return;
-            }
+            if (!currentUserId) return;
             
-            // Get session token for authentication
             const sessionToken = localStorage.getItem('session_token');
-            if (!sessionToken) {
-                console.error('No session token available for WebSocket connection');
+            if (!sessionToken) return;
+            
+            // Don't create a new connection if one already exists and is open
+            if (websocket && (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING)) {
                 return;
             }
             
             const wsUrl = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
             websocket = new WebSocket(`${wsUrl}/ws?token=${encodeURIComponent(sessionToken)}`);
             
-            websocket.onopen = function(event) {
-                console.log('WebSocket connected');
-            };
-            
             websocket.onmessage = function(event) {
                 try {
                     const data = JSON.parse(event.data);
-                    console.log('WebSocket message received:', data);
-                    
                     if (data.type === 'new_analysis') {
-                        // Refresh the analysis history when new analysis is completed
                         if (analysisHistoryTable) {
                             analysisHistoryTable.refreshData();
                         }
                         showNewAnalysisNotification(data);
                     }
                 } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
+                    console.error('WebSocket error:', error);
                 }
             };
             
             websocket.onclose = function(event) {
-                console.log('WebSocket disconnected:', event.code, event.reason);
                 websocket = null;
-                // Only attempt automatic reconnection for unexpected closures (not intentional disconnects)
-                if (currentUserId && event.code !== 1000) {
-                    console.log('Unexpected WebSocket closure, attempting reconnection');
+                // Simple reconnection for unexpected closures
+                if (currentUserId && event.code !== 1000 && event.code !== 1008) {
                     setTimeout(() => {
                         if (currentUserId && !websocket) {
                             connectWebSocket();
@@ -595,18 +584,19 @@
                 console.error('WebSocket error:', error);
             };
         }
-
         function disconnectWebSocket() {
             if (websocket) {
-                // Use clean close code to prevent backend reconnection attempts
-                websocket.close(1000, 'Page navigation');
+                try {
+                    websocket.close(1000, 'Page navigation');
+                } catch (error) {
+                    console.error('WebSocket close error:', error);
+                }
                 websocket = null;
             }
         }
 
-        // Simple Navigation-Based WebSocket Cleanup
+        // Navigation-Based WebSocket Cleanup
         function setupNavigationCleanup() {
-            // Add click handlers to all navigation links
             const navLinks = document.querySelectorAll('.nav-buttons a[href]');
             navLinks.forEach(link => {
                 link.addEventListener('click', function(e) {
@@ -615,7 +605,20 @@
                     if (analysisHistoryTable) {
                         analysisHistoryTable.destroy();
                     }
+                    currentUserId = null;
                 });
+            });
+        }
+        
+        // Page visibility handling
+        function setupVisibilityHandling() {
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    // Only reconnect if we have a user ID and no active connection
+                    if (currentUserId && (!websocket || websocket.readyState === WebSocket.CLOSED)) {
+                        setTimeout(() => connectWebSocket(), 1000);
+                    }
+                }
             });
         }
 
@@ -626,20 +629,30 @@
             if (analysisHistoryTable) {
                 analysisHistoryTable.destroy();
             }
-            // Call the global logout function
+            currentUserId = null;
             logout();
         }
 
-        // Initialize navigation cleanup after DOM is ready
-        document.addEventListener('DOMContentLoaded', setupNavigationCleanup);
+        // Initialize navigation cleanup and visibility handling after DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            setupNavigationCleanup();
+            setupVisibilityHandling();
+        });
 
-        // Fallback cleanup for edge cases (manual URL entry, browser back button)
+        // Cleanup for page unload
         window.addEventListener('beforeunload', function() {
             disconnectWebSocket();
             stopCountdownTimer();
             if (analysisHistoryTable) {
                 analysisHistoryTable.destroy();
             }
+            currentUserId = null;
+        });
+        
+        // Additional cleanup for mobile browsers
+        window.addEventListener('pagehide', function() {
+            disconnectWebSocket();
+            currentUserId = null;
         });
 
         function showNewAnalysisNotification(wsData = null) {
