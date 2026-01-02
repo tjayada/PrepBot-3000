@@ -69,15 +69,28 @@ window.loginWithLichess = async function() {
 
         const data = await response.json();
         
-        if (data.oauth_url && data.code_verifier) {
-            // Store the code verifier for later use
-            sessionStorage.setItem('oauth_code_verifier', data.code_verifier);
-            
-            // Redirect to Lichess OAuth
-            window.location.href = data.oauth_url;
-        } else {
-            throw new Error('No OAuth URL or code verifier received');
-        }
+    if (data.oauth_url && data.code_verifier) {
+      // Generate a cryptographically-random state parameter for CSRF protection
+      const stateArray = crypto.getRandomValues(new Uint8Array(32));
+      const state = Array.from(stateArray).map(b => b.toString(16).padStart(2, '0')).join('');
+
+      // Store the code verifier and state for later verification
+      sessionStorage.setItem('oauth_code_verifier', data.code_verifier);
+      sessionStorage.setItem('oauth_state', state);
+
+      // Append state to the OAuth URL in a safe way
+      try {
+        const oauthUrl = new URL(data.oauth_url);
+        oauthUrl.searchParams.set('state', state);
+        window.location.href = oauthUrl.toString();
+      } catch (err) {
+        // Fallback: if data.oauth_url is not a full URL, append by string
+        const separator = data.oauth_url.includes('?') ? '&' : '?';
+        window.location.href = `${data.oauth_url}${separator}state=${encodeURIComponent(state)}`;
+      }
+    } else {
+      throw new Error('No OAuth URL or code verifier received');
+    }
 
     } catch (error) {
         console.error('Login error:', error);

@@ -71,6 +71,16 @@
                     throw new Error('No authorization code received from Lichess');
                 }
 
+                // Verify state parameter for CSRF protection
+                const state = urlParams.get('state');
+                const storedState = sessionStorage.getItem('oauth_state');
+                if (!state || !storedState || state !== storedState) {
+                    throw new Error('Invalid or missing state parameter - possible CSRF attack.');
+                }
+
+                // Remove stored state to avoid reuse
+                sessionStorage.removeItem('oauth_state');
+
                 // Get the code verifier from sessionStorage
                 const codeVerifier = sessionStorage.getItem('oauth_code_verifier');
                 if (!codeVerifier) {

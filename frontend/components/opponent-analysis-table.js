@@ -46,7 +46,7 @@ class OpponentAnalysisTable {
         const html = `
             <div class="opponent-analysis-table-container">
                 <div class="opponent-analysis-header">
-                    <h2 class="opponent-analysis-title">${this.options.title}</h2>
+                    <h2 class="opponent-analysis-title" id="${this.containerId}-title"></h2>
                 </div>
                 
                 <div id="${this.containerId}-loading" class="opponent-analysis-loading hidden">
@@ -105,6 +105,12 @@ class OpponentAnalysisTable {
         `;
         
         this.container.innerHTML = html;
+
+        // Set title safely to avoid injecting untrusted content
+        const titleEl = document.getElementById(`${this.containerId}-title`);
+        if (titleEl) {
+            titleEl.textContent = this.options.title || '';
+        }
     }
     
     bindEvents() {
@@ -234,22 +240,37 @@ class OpponentAnalysisTable {
     
     createTableRow(analysis) {
         const row = document.createElement('tr');
-        
+
         // Format date
         const date = new Date(analysis.created_at);
-        const formattedDate = date.toLocaleDateString(); //+ ' ' + date.toLocaleTimeString();
-        
+        const formattedDate = date.toLocaleDateString();
+
         // Create color display
         const colorDisplay = analysis.color === 'white' ? 'White ♔' : 'Black ♚';
         const colorClass = analysis.color === 'white' ? 'white' : 'black';
-        
-        row.innerHTML = `
-            <td class="date-cell">${formattedDate}</td>
-            <td class="opponent-cell">${analysis.opponent}</td>
-            <td class="color-cell ${colorClass}">${colorDisplay}</td>
-            <td class="prep-cell">${analysis.preparation}</td>
-        `;
-        
+
+        const dateCell = document.createElement('td');
+        dateCell.className = 'date-cell';
+        dateCell.textContent = formattedDate;
+
+        const opponentCell = document.createElement('td');
+        opponentCell.className = 'opponent-cell';
+        opponentCell.textContent = analysis.opponent || '';
+
+        const colorCell = document.createElement('td');
+        colorCell.className = 'color-cell';
+        colorCell.classList.add(colorClass);
+        colorCell.textContent = colorDisplay;
+
+        const prepCell = document.createElement('td');
+        prepCell.className = 'prep-cell';
+        prepCell.textContent = analysis.preparation || '';
+
+        row.appendChild(dateCell);
+        row.appendChild(opponentCell);
+        row.appendChild(colorCell);
+        row.appendChild(prepCell);
+
         return row;
     }
     

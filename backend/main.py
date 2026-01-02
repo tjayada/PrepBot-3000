@@ -365,36 +365,63 @@ def generate_session_token(user_id: str) -> str:
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
 
-def verify_session_token(token: str, user_id: str = None) -> Optional[dict]:
-    """Verify and decode session token"""
-    try:
-        # Token verification in progress
+def verify_session_token(token: str) -> Optional[dict]:
+    """Verify and decode session token and ensure it matches the active database session.
 
-        # Token verification in progress
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    This function fails closed: any error validating the token (signature, expiry,
+    database access, or mismatch) will return None so the caller can reject the request.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])  # will verify signature and exp
 
         if payload.get("type") != "session":
             logger.warning("Invalid token type")
             return None
 
-        if user_id:
-            try:
-                result = (
-                    supabase.table("users")
-                    .select("session_token")
-                    .eq("id", user_id)
-                    .execute()
-                )
-                if result.data and result.data[0].get("session_token") != token:
-                    logger.warning("Token mismatch in database")
-                    return None
-            except Exception as e:
-                logger.error(f"Token revocation check failed: {e}")
-                # Token revocation check failed - continue without revocation check
-                pass
+        user_id = payload.get("user_id")
+        if not user_id:
+            logger.warning("Token missing user_id")
+            return None
 
-        # Token verification successful
+        # Check DB for active session token for this user
+        try:
+            result = (
+                supabase.table("users")
+                .select("session_token, session_expires_at")
+                .eq("id", user_id)
+                .execute()
+            )
+
+            if not result.data or len(result.data) == 0:
+                logger.warning(f"No user record found for {user_id}")
+                return None
+
+            user_row = result.data[0]
+            db_session_token = user_row.get("session_token")
+            if db_session_token != token:
+                logger.warning(f"Session token mismatch for user {user_id}")
+                return None
+
+            # Verify session hasn't expired in DB
+            expires_at_str = user_row.get("session_expires_at")
+            if expires_at_str:
+                try:
+                    expires_at = datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                    now = datetime.now(timezone.utc)
+                    if expires_at < now:
+                        logger.warning(f"Session expired for user {user_id}")
+                        return None
+                except Exception:
+                    logger.warning(f"Invalid session_expires_at format for user {user_id}")
+                    return None
+
+        except Exception as db_err:
+            logger.error(f"Database error while verifying session token for {user_id}: {db_err}")
+            # Fail closed - do not allow access if DB cannot be checked
+            return None
+
         return payload
+
     except jwt.ExpiredSignatureError:
         # Token expired
         return None
@@ -1071,17 +1098,17 @@ async def websocket_endpoint(
         await websocket.close(code=WS_1008_POLICY_VIOLATION)
         return
     
-    # Verify the user is authenticated by checking their session token
-    user_data = verify_session_token(token)
-    if not user_data:
-        logger.warning("Invalid token in WebSocket connection")
+    # Verify session token strictly against DB (signature, expiry, and active DB session)
+    token_payload = verify_session_token(token)
+    if not token_payload:
+        logger.warning("Invalid or revoked token in WebSocket connection")
         await websocket.close(code=WS_1008_POLICY_VIOLATION)
         return
 
     # Accept the WebSocket connection only if authentication succeeded
     await websocket.accept()
 
-    user_id = user_data["user_id"]
+    user_id = token_payload["user_id"]
 
     await manager.connect(websocket, user_id)
     try:

@@ -478,20 +478,40 @@
             
             // Display white analysis
             const whiteAnalysisDiv = document.getElementById('white-analysis');
-            if (analysisData.white) {
-                whiteAnalysisDiv.innerHTML = analysisData.white.prep_text;
-                whiteAnalysisDiv.style.color = '#000';
-            } else {
-                whiteAnalysisDiv.innerHTML = '<div class="analysis-loading">No analysis available for white pieces.</div>';
+            if (whiteAnalysisDiv) {
+                whiteAnalysisDiv.innerHTML = ''; // clear previous content
+                if (analysisData.white && analysisData.white.prep_text) {
+                    const p = document.createElement('div');
+                    p.className = 'analysis-text';
+                    p.style.whiteSpace = 'pre-wrap';
+                    p.textContent = analysisData.white.prep_text;
+                    whiteAnalysisDiv.appendChild(p);
+                    whiteAnalysisDiv.style.color = '#000';
+                } else {
+                    const loadingDiv = document.createElement('div');
+                    loadingDiv.className = 'analysis-loading';
+                    loadingDiv.textContent = 'No analysis available for white pieces.';
+                    whiteAnalysisDiv.appendChild(loadingDiv);
+                }
             }
-            
+
             // Display black analysis
             const blackAnalysisDiv = document.getElementById('black-analysis');
-            if (analysisData.black) {
-                blackAnalysisDiv.innerHTML = analysisData.black.prep_text;
-                blackAnalysisDiv.style.color = '#fff';
-            } else {
-                blackAnalysisDiv.innerHTML = '<div class="analysis-loading">No analysis available for black pieces.</div>';
+            if (blackAnalysisDiv) {
+                blackAnalysisDiv.innerHTML = '';
+                if (analysisData.black && analysisData.black.prep_text) {
+                    const p = document.createElement('div');
+                    p.className = 'analysis-text';
+                    p.style.whiteSpace = 'pre-wrap';
+                    p.textContent = analysisData.black.prep_text;
+                    blackAnalysisDiv.appendChild(p);
+                    blackAnalysisDiv.style.color = '#fff';
+                } else {
+                    const loadingDiv = document.createElement('div');
+                    loadingDiv.className = 'analysis-loading';
+                    loadingDiv.textContent = 'No analysis available for black pieces.';
+                    blackAnalysisDiv.appendChild(loadingDiv);
+                }
             }
         }
 
@@ -661,7 +681,27 @@
             if (latestAnalysisBanner) {
                 latestAnalysisBanner.classList.remove('hidden');
                 if (wsData) {
-                    latestAnalysisBanner.innerHTML = `<div><h3>🤖 Your latest opponent analysis:  </h3> <p> ${wsData.message} </p></div><button id="dismiss-latestAnalysis" class="btn btn--info latestAnalysis-dismiss" onclick="dismissNewAnalysisNotification()">Thanks buddy!</button>`;
+                    // Build elements safely to avoid XSS
+                    latestAnalysisBanner.innerHTML = '';
+
+                    const containerDiv = document.createElement('div');
+                    const h3 = document.createElement('h3');
+                    h3.textContent = '🤖 Your latest opponent analysis:';
+
+                    const p = document.createElement('p');
+                    p.textContent = wsData.message || '';
+
+                    containerDiv.appendChild(h3);
+                    containerDiv.appendChild(p);
+
+                    const btn = document.createElement('button');
+                    btn.id = 'dismiss-latestAnalysis';
+                    btn.className = 'btn btn--info latestAnalysis-dismiss';
+                    btn.textContent = 'Thanks buddy!';
+                    btn.addEventListener('click', dismissNewAnalysisNotification);
+
+                    latestAnalysisBanner.appendChild(containerDiv);
+                    latestAnalysisBanner.appendChild(btn);
                 }
             }      
         }
